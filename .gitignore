@@ -1,0 +1,7 @@
+dist/
+test/
+standalone.html
+genga-studio.html
+node_modules/
+*.mp4
+*.genga.json
