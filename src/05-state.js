@@ -2,7 +2,7 @@
 const FONTS=['Shippori Mincho','Noto Serif JP','Dela Gothic One','Reggae One','Yuji Syuku','Zen Maru Gothic','Zen Kaku Gothic New','Noto Sans JP'];
 const FONT_STACK=f=>`"${f}","Noto Sans JP",serif`;
 const S={doc:null,si:0,frame:0,layerId:null,tool:'select',autokey:true,playing:false,playAll:false,loop:true,onion:false,onionN:2,onionGap:2,camView:true,view:{z:.5,x:0,y:0},
- brush:{size:7,opacity:1,color:'#35222e',smooth:.45,taper:true},eraser:{size:30},shapeFill:false,fillGap:2,
+ brush:{size:7,opacity:1,color:'#35222e',smooth:.45,taper:true},celStart:'copy',eraser:{size:30},shapeFill:false,fillGap:2,
  sel:{cam:false,boneId:null,partId:null},keys:new Set(),setup:false,ik:true,ikLen:2,pins:new Set(),brushR:70,weightAmt:.12,lasso:null,tl:{ppf:9,sx:0,sy:0},rowOpen:{},isSample:false};
 let Live=null;
 const cur=()=>S.doc.scenes[S.si];
@@ -11,7 +11,11 @@ const bone=()=>{const l=layer();return l&&l.rig?l.rig.bones.find(b=>b.id===S.sel
 const part=()=>{const l=layer();return l&&l.rig?l.rig.parts.find(p=>p.id===S.sel.partId)||null:null;};
 const dpr=()=>Math.min(window.devicePixelRatio||1,2);
 function toast(msg,ms=2600){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),ms);}
-function writeProp(o,p,v){if(hasTrack(o,p)||S.autokey)setKey(o,p,S.frame,v);else o.p[p]=v;}
+function writeProp(o,p,v){
+ if(!hasTrack(o,p)&&!S.autokey){o.p[p]=v;return;}
+ if(!hasTrack(o,p)&&S.frame>0){const start=o.p[p]==null&&Array.isArray(v)?new Array(v.length).fill(0):o.p[p];if(start!=null)setKey(o,p,0,Array.isArray(start)?start.slice():start);}
+ setKey(o,p,S.frame,v);
+}
 /* ---------- undo: the doc is plain JSON, bitmaps are immutable and addressed by id ---------- */
 const Hist={st:[],i:-1,reset(){this.st=[JSON.stringify(S.doc)];this.i=0;},
  commit(){const s=JSON.stringify(S.doc);if(s===this.st[this.i])return;this.st.length=this.i+1;this.st.push(s);if(this.st.length>70)this.st.shift();this.i=this.st.length-1;Store.touch();},
@@ -42,7 +46,7 @@ function newCel(dup){
  const l=layer();if(!l||l.type!=='draw')return toast('Select a drawing layer first.');
  const F=S.frame,c=celAt(l,F),at=l.cels.find(x=>x.f===F);
  if(at){if(!dup){at.a=null;commit();}else toast('This frame already has a drawing.');return;}
- const n={f:F,a:dup&&c?c.a:null,x:c?c.x:0,y:c?c.y:0};l.cels.push(n);l.cels.sort((a,b)=>a.f-b.f);commit();
+ const n={f:F,a:dup&&c?c.a:null,x:dup&&c?c.x:0,y:dup&&c?c.y:0};l.cels.push(n);l.cels.sort((a,b)=>a.f-b.f);commit();
 }
 function holdFrames(d){const l=layer();if(!l||l.type!=='draw')return;const F=S.frame;
  if(d<0){const c=celAt(l,F),nx=l.cels.find(x=>x.f>F);if(!nx||nx.f-1<=(c?c.f:-1))return;}

@@ -14,9 +14,11 @@ function buildOpts(){
  const h=$('#opts');h.innerHTML='';const t=S.tool,add=(...x)=>h.append(...x);
  const color=()=>el('label',{},'Colour',el('input',{id:'brushColor',type:'color',value:S.brush.color,oninput:e=>{S.brush.color=e.target.value;}}));
  const tip=s=>el('span',{class:'tip'},s);
+ const celOpt=()=>S.autokey?el('label',{title:'What a new auto keyframe contains when you draw on a held frame'},'New keyframe starts',sel('oCel',[['copy','From last drawing'],['blank','Blank']],S.celStart,v=>{S.celStart=v;})):null;
  if(t==='brush'||t==='line'||t==='rect'||t==='ellipse'){add(color(),rng('oSize','Size',1,120,1,()=>S.brush.size,v=>S.brush.size=v),rng('oOp','Opacity',.05,1,.05,()=>S.brush.opacity,v=>S.brush.opacity=v));
-  if(t==='brush')add(rng('oSm','Smoothing',0,1,.05,()=>S.brush.smooth,v=>S.brush.smooth=v),el('label',{},el('input',{id:'oTaper',type:'checkbox',checked:S.brush.taper,onchange:e=>S.brush.taper=e.target.checked}),'Tapered lines'));
-  else if(t!=='line')add(el('label',{},el('input',{id:'oFill',type:'checkbox',checked:S.shapeFill,onchange:e=>S.shapeFill=e.target.checked}),'Filled'));}
+  if(t==='brush')add(rng('oSm','Smoothing',0,1,.05,()=>S.brush.smooth,v=>S.brush.smooth=v),el('label',{},el('input',{id:'oTaper',type:'checkbox',checked:S.brush.taper,onchange:e=>S.brush.taper=e.target.checked}),'Tapered lines'),celOpt()||'');
+  else if(t!=='line')add(el('label',{},el('input',{id:'oFill',type:'checkbox',checked:S.shapeFill,onchange:e=>S.shapeFill=e.target.checked}),'Filled'));
+  if(t!=='brush'&&celOpt())add(celOpt());}
  else if(t==='eraser')add(rng('oEr','Size',2,200,1,()=>S.eraser.size,v=>S.eraser.size=v));
  else if(t==='fill')add(color(),rng('oGap','Close gaps',0,6,1,()=>S.fillGap,v=>S.fillGap=v),tip('Fills stop at your line art. Raise this if colour leaks through small gaps.'));
  else if(t==='select')add(tip(S.setup?'Drag a part to line it up with the skeleton.':'Drag to move. Corners scale, the top circle rotates. Shift keeps it straight.'));

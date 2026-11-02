@@ -84,12 +84,19 @@ box.addEventListener('wheel',e=>{e.preventDefault();const r=box.getBoundingClien
 /* ---------- drawing ---------- */
 function ensureDrawLayer(){let l=layer();if(!l||l.type!=='draw'){l=newLayer('draw','Drawing',{cels:[]});l.p.x=S.doc.w/2;l.p.y=S.doc.h/2;l.p.ax=S.doc.w/2;l.p.ay=S.doc.h/2;addLayer(l);structure();toast('Added a new drawing layer.');}
  if(l.lock){toast('This layer is locked. Unlock it to draw.');return null;}return l;}
-function beginLive(l){
- const d=S.doc,w=d.w*2,h=d.h*2,o=-d.w/2,q=-d.h/2,F=stepF(l,S.frame);let c=celAt(l,F);
- if(!c){c={f:S.frame,a:null,x:0,y:0};l.cels.push(c);l.cels.sort((a,b)=>a.f-b.f);}
+/* Auto-key for drawing: a change on a held frame gets its own keyframe, so earlier frames keep their drawing */
+function autoCel(l,blankOK){
+ const F=stepF(l,S.frame);let c=celAt(l,F);
+ if(c&&(c.f===F||!S.autokey))return{c,made:false};
+ const blank=!c||(blankOK&&S.celStart==='blank');
+ const n={f:c?F:S.frame,a:blank?null:c.a,x:blank?0:c.x,y:blank?0:c.y};l.cels.push(n);l.cels.sort((a,b)=>a.f-b.f);return{c:n,made:true};
+}
+function beginLive(l,blankOK){
+ const d=S.doc,w=d.w*2,h=d.h*2,o=-d.w/2,q=-d.h/2,{c,made}=autoCel(l,blankOK);
  const base=Pool.get(w,h),stroke=Pool.get(w,h);const b=c.a&&Bitmaps.get(c.a);
  if(b)base.getContext('2d').drawImage(b.canvas,c.x-o,c.y-q);
- Live={layer:l.id,base,stroke,ox:o,oy:q,alpha:1,cel:c,dirty:b?[c.x-o,c.y-q,c.x-o+b.w,c.y-q+b.h]:null};return Live;}
+ Live={layer:l.id,base,stroke,ox:o,oy:q,alpha:1,cel:c,made,dirty:b?[c.x-o,c.y-q,c.x-o+b.w,c.y-q+b.h]:null};return Live;}
+function cancelLive(l){const L=Live;if(!L)return;if(L.made)l.cels=l.cels.filter(c=>c!==L.cel);Pool.put(L.base,L.stroke);Live=null;}
 function grow(L,x0,y0,x1,y1){const r=L.dirty;if(!r)L.dirty=[x0,y0,x1,y1];else{r[0]=Math.min(r[0],x0);r[1]=Math.min(r[1],y0);r[2]=Math.max(r[2],x1);r[3]=Math.max(r[3],y1);}}
 function endLive(){
  const L=Live;if(!L)return;const bx=L.base.getContext('2d');bx.globalAlpha=L.alpha;bx.drawImage(L.stroke,0,0);bx.globalAlpha=1;
@@ -99,7 +106,7 @@ function endLive(){
 function stampLine(L,g,a,b,ra,rb){const dist=Math.hypot(b[0]-a[0],b[1]-a[1]),step=Math.max(.6,Math.min(ra,rb)*.25),n=Math.max(1,Math.ceil(dist/step));g.beginPath();for(let i=1;i<=n;i++){const t=i/n,x=a[0]+(b[0]-a[0])*t,y=a[1]+(b[1]-a[1])*t,r=ra+(rb-ra)*t;g.moveTo(x+r,y);g.arc(x,y,r,0,7);}g.fill();const R=Math.max(ra,rb)+2;grow(L,Math.min(a[0],b[0])-R,Math.min(a[1],b[1])-R,Math.max(a[0],b[0])+R,Math.max(a[1],b[1])+R);}
 const pressure=(e,dr)=>{if(e.pointerType==='pen'&&e.pressure>0)return Math.pow(e.pressure,1.3);if(!dr)return 1;return dr;};
 const Tools={};
-const brushDown=erase=>(p,e)=>{const l=ensureDrawLayer();if(!l)return;const L=beginLive(l);L.alpha=erase?1:S.brush.opacity;const g=erase?L.base.getContext('2d'):L.stroke.getContext('2d');g.setTransform(1,0,0,1,0,0);g.globalCompositeOperation=erase?'destination-out':'source-over';g.fillStyle=erase?'#000':S.brush.color;
+const brushDown=erase=>(p,e)=>{const l=ensureDrawLayer();if(!l)return;const L=beginLive(l,!erase);L.alpha=erase?1:S.brush.opacity;const g=erase?L.base.getContext('2d'):L.stroke.getContext('2d');g.setTransform(1,0,0,1,0,0);g.globalCompositeOperation=erase?'destination-out':'source-over';g.fillStyle=erase?'#000':S.brush.color;
  const q=toLocal(l,p),a=[q[0]-L.ox,q[1]-L.oy];const size=erase?S.eraser.size:S.brush.size;const r0=size/2*(e.pointerType==='pen'?pressure(e):S.brush.taper&&!erase?.35:1);
  Ptr.drag={l,g,erase,sm:a.slice(),last:a.slice(),r:r0,size,t:performance.now()};stampLine(L,g,a,[a[0]+.01,a[1]],r0,r0);};
 const brushMove=(p,e)=>{const D=Ptr.drag;if(!D||!Live)return;const q=toLocal(D.l,p),raw=[q[0]-Live.ox,q[1]-Live.oy],k=D.erase?1:1-S.brush.smooth*.88;D.sm[0]+=(raw[0]-D.sm[0])*k;D.sm[1]+=(raw[1]-D.sm[1])*k;const dist=Math.hypot(D.sm[0]-D.last[0],D.sm[1]-D.last[1]);if(dist<.5)return;
@@ -107,7 +114,7 @@ const brushMove=(p,e)=>{const D=Ptr.drag;if(!D||!Live)return;const q=toLocal(D.l
  const r1=lerp(D.r,D.size/2*tgt,.3);stampLine(Live,D.g,D.last,D.sm,D.r,r1);D.last=D.sm.slice();D.r=r1;};
 Tools.brush={down:brushDown(false),move:brushMove,up(){if(Ptr.drag&&Live){endLive();}}};
 Tools.eraser={down:brushDown(true),move:brushMove,up(){if(Ptr.drag&&Live){Ptr.drag.g.globalCompositeOperation='source-over';endLive();}}};
-const shapeTool=(paint)=>({down(p){const l=ensureDrawLayer();if(!l)return;const L=beginLive(l);L.alpha=S.brush.opacity;const q=toLocal(l,p);Ptr.drag={l,a:[q[0]-L.ox,q[1]-L.oy]};},
+const shapeTool=(paint)=>({down(p){const l=ensureDrawLayer();if(!l)return;const L=beginLive(l,true);L.alpha=S.brush.opacity;const q=toLocal(l,p);Ptr.drag={l,a:[q[0]-L.ox,q[1]-L.oy]};},
  move(p,e){const D=Ptr.drag;if(!D||!Live)return;const q=toLocal(D.l,p);let b=[q[0]-Live.ox,q[1]-Live.oy];if(e.shiftKey&&S.tool!=='line'){const s=Math.max(Math.abs(b[0]-D.a[0]),Math.abs(b[1]-D.a[1]));b=[D.a[0]+Math.sign(b[0]-D.a[0])*s,D.a[1]+Math.sign(b[1]-D.a[1])*s];}const g=Live.stroke.getContext('2d');g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,Live.stroke.width,Live.stroke.height);g.strokeStyle=g.fillStyle=S.brush.color;g.lineWidth=S.brush.size;g.lineCap=g.lineJoin='round';g.beginPath();paint(g,D.a,b);if(S.shapeFill&&S.tool!=='line')g.fill();g.stroke();D.b=b;},
  up(){const D=Ptr.drag;if(D&&Live){if(D.b)grow(Live,Math.min(D.a[0],D.b[0])-S.brush.size,Math.min(D.a[1],D.b[1])-S.brush.size,Math.max(D.a[0],D.b[0])+S.brush.size,Math.max(D.a[1],D.b[1])+S.brush.size);endLive();}}});
 Tools.line=shapeTool((g,a,b)=>{g.moveTo(...a);g.lineTo(...b);});
@@ -115,10 +122,10 @@ Tools.rect=shapeTool((g,a,b)=>g.rect(a[0],a[1],b[0]-a[0],b[1]-a[1]));
 Tools.ellipse=shapeTool((g,a,b)=>g.ellipse((a[0]+b[0])/2,(a[1]+b[1])/2,Math.abs(b[0]-a[0])/2,Math.abs(b[1]-a[1])/2,0,0,7));
 Tools.fill={down(p){const l=ensureDrawLayer();if(!l)return;const L=beginLive(l),q=toLocal(l,p),sx=Math.round(q[0]-L.ox),sy=Math.round(q[1]-L.oy);
  const g=L.base.getContext('2d',{willReadFrequently:true}),W=S.doc.w,H=S.doc.h,x0=-L.ox,y0=-L.oy;
- if(sx<x0||sy<y0||sx>=x0+W||sy>=y0+H){Pool.put(L.base,L.stroke);Live=null;return toast('Click inside the frame to fill.');}
+ if(sx<x0||sy<y0||sx>=x0+W||sy>=y0+H){cancelLive(l);return toast('Click inside the frame to fill.');}
  const px=g.getImageData(x0,y0,W,H).data,wall=new Uint8Array(W*H);for(let i=0;i<W*H;i++)wall[i]=px[i*4+3]>110?1:0;
  const gap=S.fillGap;if(gap>0){for(let k=0;k<gap;k++){const c=wall.slice();for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){const i=y*W+x;if(!c[i]&&(c[i-1]||c[i+1]||c[i-W]||c[i+W]))wall[i]=1;}}}
- const st=new Int32Array(W*H),mask=new Uint8Array(W*H);let n=0;const s0=(sy-y0)*W+(sx-x0);if(wall[s0]){Pool.put(L.base,L.stroke);Live=null;return toast('That spot is on a line. Click inside the shape.');}
+ const st=new Int32Array(W*H),mask=new Uint8Array(W*H);let n=0;const s0=(sy-y0)*W+(sx-x0);if(wall[s0]){cancelLive(l);return toast('That spot is on a line. Click inside the shape.');}
  st[n++]=s0;mask[s0]=1;let minx=W,miny=H,maxx=0,maxy=0;
  while(n){const i=st[--n],x=i%W,y=(i-x)/W;if(x<minx)minx=x;if(x>maxx)maxx=x;if(y<miny)miny=y;if(y>maxy)maxy=y;
   if(x>0&&!mask[i-1]&&!wall[i-1]){mask[i-1]=1;st[n++]=i-1;}if(x<W-1&&!mask[i+1]&&!wall[i+1]){mask[i+1]=1;st[n++]=i+1;}if(y>0&&!mask[i-W]&&!wall[i-W]){mask[i-W]=1;st[n++]=i-W;}if(y<H-1&&!mask[i+W]&&!wall[i+W]){mask[i+W]=1;st[n++]=i+W;}}
@@ -169,7 +176,7 @@ Tools.lasso={down(p){const l=layer();if(!l||!(l.type==='draw'||l.type==='image')
 function inPoly(ps,q){let c=false;for(let i=0,j=ps.length-1;i<ps.length;j=i++){const a=ps[i],b=ps[j];if((a[1]>q[1])!==(b[1]>q[1])&&q[0]<(b[0]-a[0])*(q[1]-a[1])/(b[1]-a[1])+a[0])c=!c;}return c;}
 function lassoSrc(l){if(l.type==='image')return{b:Bitmaps.get(l.asset),x:0,y:0};const c=celAt(l,stepF(l,S.frame));return c&&c.a?{b:Bitmaps.get(c.a),x:c.x,y:c.y,c}:null;}
 function lassoExtract(l){const s=lassoSrc(l);if(!s||!S.lasso)return null;let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;S.lasso.pts.forEach(p=>{x0=Math.min(x0,p[0]);y0=Math.min(y0,p[1]);x1=Math.max(x1,p[0]);y1=Math.max(y1,p[1]);});x0=Math.floor(x0);y0=Math.floor(y0);const c=mkCanvas(x1-x0+2,y1-y0+2),g=c.getContext('2d');g.beginPath();S.lasso.pts.forEach((p,i)=>i?g.lineTo(p[0]-x0,p[1]-y0):g.moveTo(p[0]-x0,p[1]-y0));g.closePath();g.clip();g.drawImage(s.b.canvas,s.x-x0,s.y-y0);return{canvas:c,x:x0,y:y0};}
-function lassoCut(l){const s=lassoSrc(l);if(!s)return;const c=mkCanvas(s.b.w,s.b.h),g=c.getContext('2d');g.drawImage(s.b.canvas,0,0);g.globalCompositeOperation='destination-out';g.beginPath();S.lasso.pts.forEach((p,i)=>i?g.lineTo(p[0]-s.x,p[1]-s.y):g.moveTo(p[0]-s.x,p[1]-s.y));g.closePath();g.fill();const id=addBitmap(c);if(l.type==='image')l.asset=id;else s.c.a=id;}
+function lassoCut(l){if(l.type==='draw')autoCel(l,false);const s=lassoSrc(l);if(!s)return;const c=mkCanvas(s.b.w,s.b.h),g=c.getContext('2d');g.drawImage(s.b.canvas,0,0);g.globalCompositeOperation='destination-out';g.beginPath();S.lasso.pts.forEach((p,i)=>i?g.lineTo(p[0]-s.x,p[1]-s.y):g.moveTo(p[0]-s.x,p[1]-s.y));g.closePath();g.fill();const id=addBitmap(c);if(l.type==='image')l.asset=id;else s.c.a=id;}
 function lassoToLayer(){const l=layer(),ex=lassoExtract(l);if(!ex)return;const{x:ax,y:ay}=l.p;lassoCut(l);const n=newLayer('draw','Cut-out',{cels:[{f:0,a:addBitmap(ex.canvas),x:ex.x,y:ex.y}]});n.p=JSON.parse(JSON.stringify(l.p));n.tr=JSON.parse(JSON.stringify(l.tr));S.lasso=null;addLayer(n);structure();commit();toast('Moved the selection to a new layer.');}
 function targetRig(){const sc=cur();let r=[...sc.layers].reverse().find(l=>l.type==='rig');if(!r){r=newLayer('rig','Character rig',{rig:{bones:[],parts:[]}});addLayer(r);}return r;}
 function lassoToPart(){const l=layer(),ex=lassoExtract(l);if(!ex)return;lassoCut(l);const own=layerOwn(l,S.frame),q=M.ap(own,ex.x,ex.y);const r=targetRig();const t=newPart('Part '+(r.rig.parts.length+1),addBitmap(ex.canvas),Math.round(q[0]),Math.round(q[1]));r.rig.parts.push(t);S.lasso=null;commit();structure();toast(`Added "${t.name}" to ${r.name}.`);}
