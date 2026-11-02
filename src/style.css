@@ -128,3 +128,6 @@ input[type=range]{padding:0;accent-color:var(--glow)}
 .fh{display:flex;align-items:center;gap:2px}
 .fh label{display:flex;align-items:center;gap:6px;flex:1;min-width:0;font-weight:700}
 .fh .ic{width:20px;height:20px;padding:0;background:none;border:0;color:var(--mute)}
+
+.swr{display:flex;align-items:center;gap:5px}
+.sw{width:22px;height:22px;padding:0;border:1px solid var(--mute);border-radius:50%}

@@ -157,7 +157,7 @@ let thumbT=null;
 function scheduleThumbs(){clearTimeout(thumbT);thumbT=setTimeout(()=>{const k=192/S.doc.w;S.doc.scenes.forEach(s=>{const c=thumbs.get(s.id);if(c){const g=c.getContext('2d');renderScene(g,s,Math.min(s.dur-1,Math.floor(s.dur*.6)),{base:[k,0,0,k,0,0],useCam:true,clip:true});}});},350);}
 function moveScene(from,to){const ss=S.doc.scenes;to=clamp(to,0,ss.length-1);if(from===to)return;const active=cur(),[m]=ss.splice(from,1);ss.splice(to,0,m);S.si=ss.indexOf(active);commit();buildCuts();buildInspector();toast(`Moved ${m.name}.`);}
 function gotoScene(i){S.si=i;S.frame=Math.min(S.frame,cur().dur-1);S.layerId=cur().layers[cur().layers.length-1]?.id||null;S.keys.clear();S.sel={cam:false,boneId:null,partId:null};S.setup=false;structure();}
-function addScene(){const s=newScene('Cut '+(S.doc.scenes.length+1),48);S.doc.scenes.splice(S.si+1,0,s);S.si++;S.frame=0;S.layerId=null;commit();structure();}
+function addScene(){const s=newScene('Cut '+(S.doc.scenes.length+1),48);s.bg=cur().bg;S.doc.scenes.splice(S.si+1,0,s);S.si++;S.frame=0;S.layerId=null;commit();structure();}
 function dupScene(){const sc=cur(),c=JSON.parse(JSON.stringify(sc));c.id=uid('s');c.camera.id=uid('c');c.name=sc.name+' copy';const map={};c.layers=c.layers.map(l=>{if(l.rig){const n=cloneRigLayer(l);map[l.id]=n.id;return n;}const id=uid('l');map[l.id]=id;l.id=id;return l;});c.layers.forEach(l=>{if(l.parent)l.parent=map[l.parent]||null;});S.doc.scenes.splice(S.si+1,0,c);S.si++;commit();structure();}
 function delScene(){if(S.doc.scenes.length<2)return toast('A film needs at least one cut.');S.doc.scenes.splice(S.si,1);S.si=clamp(S.si,0,S.doc.scenes.length-1);S.frame=Math.min(S.frame,cur().dur-1);S.layerId=null;commit();structure();}
 /* playback */

@@ -12,7 +12,7 @@ function setRigMode(setup){const was=S.setup;S.setup=setup;if(was&&!setup){const
 function rng(id,label,min,max,step,get,set){const o=el('output',{},String(get()));return el('label',{for:id},label,el('input',{id,type:'range',min,max,step,value:get(),oninput:e=>{set(+e.target.value);o.textContent=e.target.value;invalidate();}}),o);}
 function buildOpts(){
  const h=$('#opts');h.innerHTML='';const t=S.tool,add=(...x)=>h.append(...x);
- const color=()=>el('label',{},'Colour',el('input',{id:'brushColor',type:'color',value:S.brush.color,oninput:e=>{S.brush.color=e.target.value;}}));
+ const color=()=>el('span',{class:'swr'},el('label',{},'Colour',el('input',{id:'brushColor',type:'color',value:S.brush.color,oninput:e=>{S.brush.color=e.target.value;}})),...[['#ffffff','White'],['#000000','Black']].map(([c,n])=>el('button',{class:'sw',style:`background:${c}`,title:n,'aria-label':n+' brush',onclick:()=>{S.brush.color=c;buildOpts();}})));
  const tip=s=>el('span',{class:'tip'},s);
  const celOpt=()=>S.autokey?el('label',{title:'What a new auto keyframe contains when you draw on a held frame'},'New keyframe starts',sel('oCel',[['copy','From last drawing'],['blank','Blank']],S.celStart,v=>{S.celStart=v;})):null;
  if(t==='brush'||t==='line'||t==='rect'||t==='ellipse'){add(color(),rng('oSize','Size',1,120,1,()=>S.brush.size,v=>S.brush.size=v),rng('oOp','Opacity',.05,1,.05,()=>S.brush.opacity,v=>S.brush.opacity=v));
@@ -52,17 +52,18 @@ function buildInspector(){
  if(S.sel.cam){const c=sc.camera;h.append(sec('Camera',nr(c,'x','Pan X'),nr(c,'y','Pan Y'),nr(c,'zoom','Zoom',{step:.01,min:.05,max:20}),nr(c,'rot','Roll',{step:.2}),nr(c,'shake','Shake',{step:.5,min:0}),el('p',{class:'hint'},'Set depth on each layer for multiplane parallax: 0 stays still, 1 moves with the camera, above 1 passes faster in the foreground.')));}
  else if(l){
   h.append(layerHead(l));
+  if(l.type!=='fx'&&l.type!=='rig')h.append(filtersPanel(l));
   if(l.type==='rig')rigPanel(h,l);
   if(l.type==='text')textPanel(h,l);
   if(l.type==='fx')fxPanel(h,l);
   if(l.type==='solid')h.append(sec('Fill',row('Colour',el('input',{id:'solidC',type:'color',value:l.color,oninput:e=>{l.color=e.target.value;invalidate();},onchange:commit}))));
   if(l.type==='draw'||l.type==='image')h.append(sec('Rig',el('div',{class:'btns'},el('button',{onclick:layerToPart},'Send to rig as a part')),el('p',{class:'hint'},'Draw a body part here, then send it to the character rig.')));
-  if(l.type!=='fx')h.append(filtersPanel(l));
+  if(l.type==='rig')h.append(filtersPanel(l));
   if(l.type!=='fx'&&!(part()||bone()))h.append(transformPanel(l));
  }
  if(!l&&!S.sel.cam&&S.sel.clip){const c=S.doc.audio.find(x=>x.id===S.sel.clip);if(c)h.append(sec('Sound',el('p',{class:'hint'},c.name),row('Volume',el('input',{id:'sndV',type:'range',min:0,max:1.5,step:.01,value:c.vol,oninput:e=>{c.vol=+e.target.value;},onchange:commit})),row('Start frame',el('input',{id:'sndS',type:'number',value:c.start,onchange:e=>{c.start=Math.max(0,+e.target.value);commit();}})),row('Skip (sec)',el('input',{id:'sndO',type:'number',min:0,step:.1,value:c.offset||0,title:'Skip this much of the start of the file',onchange:e=>{c.offset=Math.max(0,+e.target.value);commit();}})),row('Fade in (sec)',el('input',{id:'sndFi',type:'number',min:0,step:.1,value:c.fadeIn||0,onchange:e=>{c.fadeIn=Math.max(0,+e.target.value);commit();}})),row('Fade out (sec)',el('input',{id:'sndFo',type:'number',min:0,step:.1,value:c.fadeOut||0,title:'Fades before the sound or the film ends, whichever comes first',onchange:e=>{c.fadeOut=Math.max(0,+e.target.value);commit();}}))));}
  h.append(scenePanel(sc));
- h.append(sec('Film',row('Frame rate',sel('dFps',[['12','12 fps'],['24','24 fps (anime standard)'],['30','30 fps']],String(S.doc.fps),v=>{S.doc.fps=+v;commit();buildCuts();toast('Frame rate changed. Keys stay on their frame numbers, so timing shifts.');}))));
+ h.append(sec('Film',el('div',{class:'btns'},el('button',{onclick:()=>allBackdrops(sc.bg)},'Use this backdrop on every cut')),row('Frame rate',sel('dFps',[['12','12 fps'],['24','24 fps (anime standard)'],['30','30 fps']],String(S.doc.fps),v=>{S.doc.fps=+v;commit();buildCuts();toast('Frame rate changed. Keys stay on their frame numbers, so timing shifts.');}))));
 }
 function layerHead(l){return sec('Layer',row('Name',el('input',{id:'lName',value:l.name,onchange:e=>{l.name=e.target.value;commit();buildRows();},onkeydown:e=>e.stopPropagation()})),
  el('div',{class:'btns'},el('button',{onclick:()=>{const c=l.rig?cloneRigLayer(l):Object.assign(JSON.parse(JSON.stringify(l)),{id:uid('l')});(c.filters||[]).forEach(q=>q.id=uid('f'));c.name=l.name+' copy';addLayer(c);structure();commit();}},'Duplicate'),el('button',{onclick:()=>removeLayer(l.id)},'Delete')));}
@@ -122,7 +123,10 @@ async function addSwap(p){const fs=await pick('image/*',true);if(!fs.length)retu
 function lipSync(p){const d=S.doc,sc=cur(),st=sceneStart(S.si),n=p.assets.length,fps=d.fps;delete p.tr.swap;let last=-1;const levels=[];
  for(let f=0;f<sc.dur;f+=2){let rms=0;for(const c of d.audio){const s=Sounds.get(c.asset);if(!s)continue;const t=(st+f-c.start)/fps+(c.offset||0);if(t<0||t>=s.buffer.duration)continue;const ch=s.buffer.getChannelData(0),a=Math.floor(t*s.buffer.sampleRate),L=Math.floor(s.buffer.sampleRate/12);let e=0;for(let i=0;i<L;i+=16){const v=ch[a+i]||0;e+=v*v;}rms=Math.max(rms,Math.sqrt(e/(L/16))*c.vol);}levels.push(rms);}
  const top=Math.max(...levels,.001);levels.forEach((v,i)=>{const r=v/top,idx=r<.12?0:Math.min(n-1,1+Math.floor(r*(n-1)*.999));if(idx!==last){setKey(p,'swap',i*2,idx,'hold');last=idx;}});commit();structure();toast('Lip-sync keys added on twos.');}
-function scenePanel(sc){const t=sc.trans;return sec('This cut',row('Name',el('input',{id:'sName',value:sc.name,onchange:e=>{sc.name=e.target.value;commit();buildCuts();},onkeydown:e=>e.stopPropagation()})),row('Backdrop',el('input',{id:'sBg',type:'color',value:sc.bg,oninput:e=>{sc.bg=e.target.value;invalidate();},onchange:commit})),
+const lum=h=>{const c=parseInt(h.slice(1),16);return(.3*(c>>16)+.59*((c>>8)&255)+.11*(c&255))/255;};
+function inkForBackdrop(bg){const dark=lum(bg)<.3;if(dark===(lum(S.brush.color)<.3)){S.brush.color=dark?'#ffffff':'#000000';buildOpts();toast(`Brush switched to ${dark?'white':'black'} so it shows on this backdrop.`);}}
+function allBackdrops(col){S.doc.scenes.forEach(s=>s.bg=col);commit();inkForBackdrop(col);buildInspector();buildCuts();toast('Backdrop set on every cut.');}
+function scenePanel(sc){const t=sc.trans;return sec('This cut',row('Name',el('input',{id:'sName',value:sc.name,onchange:e=>{sc.name=e.target.value;commit();buildCuts();},onkeydown:e=>e.stopPropagation()})),row('Backdrop',el('input',{id:'sBg',type:'color',value:sc.bg,oninput:e=>{sc.bg=e.target.value;invalidate();},onchange:()=>{commit();inkForBackdrop(sc.bg);buildCuts();}})),
  row('Way in',sel('sTr',[['cut','Hard cut'],['black','Dip to black'],['white','Dip to white'],['flash','Flash'],['cross','Cross fade'],['wipe','Wipe']],t.type,v=>{t.type=v;commit();buildCuts();})),row('Transition',el('input',{id:'sTd',type:'number',min:2,value:t.dur,title:'Length in frames',onchange:e=>{t.dur=Math.max(2,+e.target.value);commit();}})),
  el('div',{class:'btns'},el('button',{onclick:()=>moveScene(S.si,S.si-1),disabled:S.si===0},'Move earlier'),el('button',{onclick:()=>moveScene(S.si,S.si+1),disabled:S.si===S.doc.scenes.length-1},'Move later'),el('button',{onclick:dupScene},'Duplicate cut'),el('button',{onclick:delScene},'Delete cut')),el('p',{class:'hint'},'You can also drag cuts along the strip to reorder them. Sound stays where it is on the film.'));}
 /* easing editor */

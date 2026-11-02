@@ -57,7 +57,7 @@ const LAYER_P=()=>({x:0,y:0,rot:0,sx:1,sy:1,ax:0,ay:0,opacity:1,blur:0,bright:1,
 function newLayer(type,name,extra={}){
  return Object.assign({id:uid('l'),name,type,vis:true,lock:false,open:false,blend:'source-over',parallax:1,screen:false,step:1,parent:null,tintColor:'#ffffff',filters:[],p:LAYER_P(),tr:{}},extra);
 }
-function newScene(name,dur=72){return{id:uid('s'),name,dur,bg:'#f7f4ee',trans:{type:'cut',dur:12},camera:{id:uid('c'),name:'Camera',p:{x:0,y:0,zoom:1,rot:0,shake:0},tr:{}},layers:[]};}
+function newScene(name,dur=72){return{id:uid('s'),name,dur,bg:'#000000',trans:{type:'cut',dur:12},camera:{id:uid('c'),name:'Camera',p:{x:0,y:0,zoom:1,rot:0,shake:0},tr:{}},layers:[]};}
 function newDoc(name='Untitled trailer'){return{v:1,name,w:1920,h:1080,fps:24,scenes:[newScene('Cut 1')],audio:[]};}
 const FX={
  gradient:{label:'Sky gradient',p:{top:'#20345e',mid:'#d98a7c',low:'#fbd6a2',midPos:.55}},
@@ -82,6 +82,8 @@ FX.chroma.range={amount:[0,30,.5]};
 
 /* picture filters: the same set works on one layer or, as an effect layer, on everything below it */
 const FILTERS={
+ colour:{label:'Colour',mode:7,p:{color:'#ffffff',amount:1},range:{amount:[0,1,.01]}},
+ adjust:{label:'Adjust colours',mode:8,p:{hue:0,sat:1,bright:1},range:{hue:[-180,180,1],sat:[0,3,.01],bright:[0,3,.01]}},
  boil:{label:'Sketchy lines',mode:0,p:{amount:2.5,scale:26,rate:3,cycle:4,seed:1},range:{amount:[0,20,.1],scale:[4,200,1]}},
  pencil:{label:'Pencil texture',mode:1,p:{amount:.28,grain:4,rate:4,cycle:4,seed:2},range:{amount:[0,1,.01],grain:[1,30,.5]}},
  cel:{label:'Cel shade',mode:2,p:{levels:5},range:{levels:[2,12,1]}},
@@ -91,6 +93,6 @@ const FILTERS={
  jitter:{label:'Hand-held shake',mode:6,p:{amount:3,turn:.4,rate:2,cycle:0,seed:4},range:{amount:[0,30,.1],turn:[0,5,.05]}},
 };
 const FILTER_COMMON={rate:[1,12,1],cycle:[0,12,1],seed:[0,99,1]};
-const FILTER_LABEL={rate:'Hold frames',cycle:'Loop drawings',amount:'Amount',scale:'Wobble size',grain:'Grain',levels:'Tones',size:'Dot size',width:'Width',turn:'Turn',seed:'Variation',color:'Colour'};
-for(const k of ['boil','pencil','cel','halftone','water','jitter']){const f=FILTERS[k];FX['f_'+k]={label:f.label+' (whole picture)',p:{...f.p},filter:k,range:{...FILTER_COMMON,...f.range}};}
+const FILTER_LABEL={hue:'Hue shift',sat:'Saturation',bright:'Brightness',rate:'Hold frames',cycle:'Loop drawings',amount:'Amount',scale:'Wobble size',grain:'Grain',levels:'Tones',size:'Dot size',width:'Width',turn:'Turn',seed:'Variation',color:'Colour'};
+for(const k of ['colour','adjust','boil','pencil','cel','halftone','water','jitter']){const f=FILTERS[k];FX['f_'+k]={label:f.label+' (whole picture)',p:{...f.p},filter:k,range:{...FILTER_COMMON,...f.range}};}
 function newFilter(type){return{id:uid('f'),type,on:true,p:{...FILTERS[type].p},tr:{}};}
