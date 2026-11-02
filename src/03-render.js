@@ -82,6 +82,7 @@ function adjustFX(ctx,l,f){
  /* adjustment effects re-process everything already painted below them */
  const cv=ctx.canvas,w=cv.width,h=cv.height,p={};for(const k in l.p)p[k]=val(l,k,f);
  const sc=frameScale(ctx);
+ if(FX[l.fx].filter){const t=Pool.get(w,h);t.getContext('2d').drawImage(cv,0,0);FXGL.run(t,FX[l.fx].filter,k=>p[k],f,sc);ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.filter='none';ctx.globalCompositeOperation='source-over';ctx.drawImage(t,0,0);ctx.restore();Pool.put(t);return;}
  ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.filter='none';
  const copy=(filter)=>{const t=Pool.get(w,h),x=t.getContext('2d');x.filter=filter||'none';x.drawImage(cv,0,0);x.filter='none';return t;};
  if(l.fx==='grade'){const g=copy(`brightness(${p.bright}) contrast(${p.contrast}) saturate(${p.sat}) hue-rotate(${p.hue}deg)`);ctx.drawImage(g,0,0);Pool.put(g);
@@ -93,8 +94,43 @@ function adjustFX(ctx,l,f){
  else if(l.fx==='grain'&&p.amount>0){const t=grainPattern();ctx.globalCompositeOperation='overlay';ctx.globalAlpha=p.amount;const pat=ctx.createPattern(t,'repeat');ctx.fillStyle=pat;ctx.translate(-Math.floor(rnd(f)*256),-Math.floor(rnd(f+.5)*256));ctx.fillRect(0,0,w+256,h+256);}
  ctx.restore();
 }
+const FXGL={cv:document.createElement('canvas'),gl:null,init(){
+ const gl=this.gl=this.cv.getContext('webgl2',{premultipliedAlpha:true,alpha:true,preserveDrawingBuffer:true});if(!gl)return;
+ const sh=(t,s)=>{const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))console.error(gl.getShaderInfoLog(o));return o;};
+ const p=gl.createProgram();
+ gl.attachShader(p,sh(gl.VERTEX_SHADER,`#version 300 es
+ void main(){vec2 v=vec2(gl_VertexID==1?3.:-1.,gl_VertexID==2?3.:-1.);gl_Position=vec4(v,0,1);}`));
+ gl.attachShader(p,sh(gl.FRAGMENT_SHADER,`#version 300 es
+ precision highp float;uniform sampler2D t;uniform vec2 r;uniform float px,a,b,s;uniform int m;uniform vec3 col;out vec4 o;
+ float h(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+ float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
+ float fbm(vec2 p){return n(p)*.6+n(p*2.1+7.)*.3+n(p*4.3+3.)*.1;}
+ vec4 tx(vec2 q){return texture(t,q/r);}
+ vec3 un(vec4 c){return c.a>.001?c.rgb/c.a:vec3(0);}
+ void main(){vec2 q=gl_FragCoord.xy,d=q/px,S=vec2(mod(s,97.)*13.7,mod(s,97.)*7.3);
+  if(m==0){vec2 w=vec2(fbm(d/b+S),fbm(d/b+S+vec2(41,17)))-.5;o=tx(q+w*3.*a*px);}
+  else if(m==1){vec2 w=vec2(fbm(d/18.+S),fbm(d/18.+S+vec2(41,17)))-.5;vec4 c=tx(q+w*3.*px);float g=fbm(d/b*.8+S*.6);o=c*smoothstep(a*.75-.1,a*.75+.1,g);}
+  else if(m==2){vec4 c=tx(q);o=vec4(floor(un(c)*a+.5)/a*c.a,c.a);}
+  else if(m==3){vec4 c=tx(q);vec3 rgb=un(c);float L=dot(rgb,vec3(.3,.59,.11));vec2 u=mat2(.707,-.707,.707,.707)*d/a;vec2 g=fract(u)-.5;float R=sqrt(max(1.-L,0.))*.72,D=length(g);float e=.5/(a*px)+.04;float dotv=smoothstep(R+e,R-e,D);vec3 tone=mix(vec3(1),col,dotv);o=vec4(mix(rgb,tone,b)*c.a,c.a);}
+  else if(m==4){vec4 c=tx(q);float e=0.;for(int i=0;i<16;i++){float t2=float(i)*.3927;e=max(e,tx(q+vec2(cos(t2),sin(t2))*a*px).a);e=max(e,tx(q+vec2(cos(t2),sin(t2))*a*px*.5).a);}o=c+vec4(col,1)*e*(1.-c.a);}
+  else if(m==5){vec2 w=vec2(fbm(d/b+S),fbm(d/b+S+vec2(41,17)))-.5;vec4 c=tx(q+w*3.*a*px);vec3 rgb=un(c);float bl=fbm(d/(b*1.6)+S*.4);rgb=mix(rgb,vec3(1),.12)*(.86+.3*bl);float ed=0.;for(int i=0;i<8;i++){float t2=float(i)*.785;ed+=tx(q+vec2(cos(t2),sin(t2))*5.*px).a;}ed=1.-ed/8.;rgb*=1.-ed*.35;o=vec4(rgb*c.a,c.a);}
+  else{vec2 c0=r*.5;float tr=(h(vec2(mod(s,97.),3.))-.5)*2.*b*.01745;float cs=cos(tr),sn=sin(tr);vec2 sh=(vec2(h(vec2(mod(s,97.),1.)),h(vec2(mod(s,97.),2.)))-.5)*2.*a*px;o=tx(c0+mat2(cs,-sn,sn,cs)*(q-c0)+sh);}
+ }`));
+ gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))console.error(gl.getProgramInfoLog(p));gl.useProgram(p);this.u={};for(const k of['r','px','a','b','s','m','col'])this.u[k]=gl.getUniformLocation(p,k);
+ gl.bindVertexArray(gl.createVertexArray());const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);
+ for(const[k,v]of[[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]])gl.texParameteri(gl.TEXTURE_2D,k,v);
+ gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,true);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.clearColor(0,0,0,0);
+ this.cv.addEventListener('webglcontextlost',e=>e.preventDefault());this.cv.addEventListener('webglcontextrestored',()=>this.init());},
+ run(canvas,type,get,f,pxs){if(!this.gl)this.init();const gl=this.gl;if(!gl)return;const w=canvas.width,h=canvas.height,cv=this.cv;if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h;gl.viewport(0,0,w,h);}
+  const d=FILTERS[type],rate=Math.max(1,Math.round(get('rate')||1)),cyc=Math.round(get('cycle')||0);let k=Math.floor(f/rate);if(cyc>0)k%=cyc;
+  const s=k+(get('seed')||0)*11+1,u=this.u;let a=0,b=0;
+  if(type==='boil'||type==='water'){a=get('amount');b=Math.max(1,get('scale'));}else if(type==='pencil'){a=get('amount');b=get('grain');}else if(type==='cel')a=get('levels');else if(type==='halftone'){a=Math.max(1,get('size'));b=get('amount');}else if(type==='outline')a=get('width');else if(type==='jitter'){a=get('amount');b=get('turn');}
+  const c=parseInt((get('color')||'#000000').slice(1),16);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,canvas);gl.uniform2f(u.r,w,h);gl.uniform1f(u.px,pxs);gl.uniform1f(u.a,a);gl.uniform1f(u.b,b);gl.uniform1f(u.s,s);gl.uniform1i(u.m,d.mode);gl.uniform3f(u.col,(c>>16)/255,((c>>8)&255)/255,(c&255)/255);
+  gl.clear(gl.COLOR_BUFFER_BIT);gl.drawArrays(gl.TRIANGLES,0,3);gl.flush();
+  const x=canvas.getContext('2d');x.save();x.setTransform(1,0,0,1,0,0);x.globalAlpha=1;x.filter='none';x.globalCompositeOperation='copy';x.drawImage(cv,0,0);x.restore();}};
 const frameScale=(ctx)=>ctx._frameScale||1;
-const ADJUST=new Set(['grade','bloom','chroma','impact','grain']);
+const ADJUST=new Set(['grade','bloom','chroma','impact','grain',...Object.keys(FX).filter(k=>FX[k].filter)]);
 function layerFilter(l,f,s){const b=val(l,'blur',f),br=val(l,'bright',f),sa=val(l,'sat',f);if(!b&&br===1&&sa===1)return'none';return`${b?`blur(${b*s}px) `:''}${br!==1?`brightness(${br}) `:''}${sa!==1?`saturate(${sa})`:''}`;}
 function drawBody(cx,l,f,mat,o,sc){
  const d=DOC();
@@ -111,14 +147,14 @@ function drawBody(cx,l,f,mat,o,sc){
 function renderLayer(ctx,l,sc,f,o,cam){
  const d=DOC(),F=stepF(l,f);
  if(l.type==='fx'){
-  if(ADJUST.has(l.fx)){if(o.useCam!==false)adjustFX(ctx,l,F);return;}
+  if(ADJUST.has(l.fx)){if(o.useCam!==false)adjustFX(ctx,l,FX[l.fx].filter?f:F);return;}
   const op=val(l,'opacity',F);
   ctx.save();ctx.setTransform(...o.base);ctx.globalCompositeOperation=l.blend;ctx.globalAlpha=1;rigFX(ctx,l,F,d.w,d.h);ctx.restore();return;
  }
  const mat=layerMatrix(l,sc,F,o.base,o.useCam!==false,cam);
  const alpha=val(l,'opacity',F),s=M.scale(mat);
  if(alpha<=.001)return;
- const tint=val(l,'tint',F),filter=layerFilter(l,F,s),buffered=tint>0||(l.type==='rig'&&(alpha<1||filter!=='none'||l.blend!=='source-over'));
+ const pics=(l.filters||[]).filter(x=>x.on!==false),tint=val(l,'tint',F),filter=layerFilter(l,F,s),buffered=tint>0||pics.length>0||(l.type==='rig'&&(alpha<1||filter!=='none'||l.blend!=='source-over'));
  if(!buffered){
   ctx.save();ctx.globalAlpha=alpha;ctx.globalCompositeOperation=l.blend;ctx.filter=filter;drawBody(ctx,l,F,mat,o,sc);ctx.restore();return;
  }
@@ -126,6 +162,8 @@ function renderLayer(ctx,l,sc,f,o,cam){
  drawBody(x,l,F,mat,o,sc);
  x.setTransform(1,0,0,1,0,0);
  if(tint>0){x.globalCompositeOperation='source-atop';x.globalAlpha=tint;x.fillStyle=l.tintColor;x.fillRect(0,0,b.width,b.height);x.globalCompositeOperation='source-over';x.globalAlpha=1;}
+ /* filters use the real frame, not the stepped one, so lines keep boiling on held drawings */
+ for(const q of pics)FXGL.run(b,q.type,k=>val(q,k,f),f,frameScale(ctx));
  ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=alpha;ctx.globalCompositeOperation=l.blend;ctx.filter=filter;ctx.drawImage(b,0,0);ctx.restore();
  Pool.put(b);
 }

@@ -55,7 +55,7 @@ function addBitmap(canvas,id){id=id||uid('a');Bitmaps.set(id,{canvas,w:canvas.wi
 /* ---------- document ---------- */
 const LAYER_P=()=>({x:0,y:0,rot:0,sx:1,sy:1,ax:0,ay:0,opacity:1,blur:0,bright:1,sat:1,tint:0});
 function newLayer(type,name,extra={}){
- return Object.assign({id:uid('l'),name,type,vis:true,lock:false,open:false,blend:'source-over',parallax:1,screen:false,step:1,parent:null,tintColor:'#ffffff',p:LAYER_P(),tr:{}},extra);
+ return Object.assign({id:uid('l'),name,type,vis:true,lock:false,open:false,blend:'source-over',parallax:1,screen:false,step:1,parent:null,tintColor:'#ffffff',filters:[],p:LAYER_P(),tr:{}},extra);
 }
 function newScene(name,dur=72){return{id:uid('s'),name,dur,bg:'#f7f4ee',trans:{type:'cut',dur:12},camera:{id:uid('c'),name:'Camera',p:{x:0,y:0,zoom:1,rot:0,shake:0},tr:{}},layers:[]};}
 function newDoc(name='Untitled trailer'){return{v:1,name,w:1920,h:1080,fps:24,scenes:[newScene('Cut 1')],audio:[]};}
@@ -79,3 +79,18 @@ const FX={
 };
 const FX_RANGE={count:[0,400,1],speed:[0,5,.05],size:[.1,5,.05],wind:[-4,4,.05],opacity:[0,1,.01],seed:[0,99,1],inner:[0,1,.01],cx:[-.5,1.5,.01],cy:[-.5,1.5,.01],spin:[-3,3,.05],amount:[0,1,.01],radius:[0,80,1],midPos:[0,1,.01],bright:[0,2,.01],contrast:[0,3,.01],sat:[0,3,.01],hue:[-180,180,1],warm:[-1,1,.01],invert:[0,1,.01]};
 FX.chroma.range={amount:[0,30,.5]};
+
+/* picture filters: the same set works on one layer or, as an effect layer, on everything below it */
+const FILTERS={
+ boil:{label:'Sketchy lines',mode:0,p:{amount:2.5,scale:26,rate:3,cycle:4,seed:1},range:{amount:[0,20,.1],scale:[4,200,1]}},
+ pencil:{label:'Pencil texture',mode:1,p:{amount:.28,grain:4,rate:4,cycle:4,seed:2},range:{amount:[0,1,.01],grain:[1,30,.5]}},
+ cel:{label:'Cel shade',mode:2,p:{levels:5},range:{levels:[2,12,1]}},
+ halftone:{label:'Manga dots',mode:3,p:{size:9,amount:.9,color:'#15121a'},range:{size:[3,40,1],amount:[0,1,.01]}},
+ outline:{label:'Ink outline',mode:4,p:{width:4,color:'#1a1420'},range:{width:[.5,30,.5]}},
+ water:{label:'Watercolour',mode:5,p:{amount:3,scale:60,rate:6,cycle:4,seed:3},range:{amount:[0,20,.1],scale:[4,200,1]}},
+ jitter:{label:'Hand-held shake',mode:6,p:{amount:3,turn:.4,rate:2,cycle:0,seed:4},range:{amount:[0,30,.1],turn:[0,5,.05]}},
+};
+const FILTER_COMMON={rate:[1,12,1],cycle:[0,12,1],seed:[0,99,1]};
+const FILTER_LABEL={rate:'Hold frames',cycle:'Loop drawings',amount:'Amount',scale:'Wobble size',grain:'Grain',levels:'Tones',size:'Dot size',width:'Width',turn:'Turn',seed:'Variation',color:'Colour'};
+for(const k of ['boil','pencil','cel','halftone','water','jitter']){const f=FILTERS[k];FX['f_'+k]={label:f.label+' (whole picture)',p:{...f.p},filter:k,range:{...FILTER_COMMON,...f.range}};}
+function newFilter(type){return{id:uid('f'),type,on:true,p:{...FILTERS[type].p},tr:{}};}

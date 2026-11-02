@@ -24,7 +24,7 @@ const commit=()=>{Hist.commit();invalidate();};
 /* ---------- redraw scheduling ---------- */
 let needPaint=false,needThumb=false;
 function invalidate(){if(!S.doc)return;if(!needPaint){needPaint=true;requestAnimationFrame(()=>{needPaint=false;paintStage();drawGrid();syncInspector();});}}
-function structure(){buildRows();buildInspector();buildCuts();buildOpts();invalidate();}
+function structure(){buildRows();buildInspector();buildCuts();buildOpts();syncDur();invalidate();}
 function setFrame(f){S.frame=clamp(Math.round(f),0,cur().dur-1);invalidate();}
 function selectLayer(id,keep){S.layerId=id;if(!keep){S.sel.boneId=null;S.sel.partId=null;S.sel.cam=false;S.lasso=null;}const l=layer();if(!l||l.type!=='rig')S.setup=false;buildRows();buildInspector();buildOpts();invalidate();}
 function addLayer(l,sc=cur()){const i=sc.layers.findIndex(x=>x.id===S.layerId);sc.layers.splice(i>=0?i+1:sc.layers.length,0,l);S.layerId=l.id;S.sel.boneId=S.sel.partId=null;S.sel.cam=false;}

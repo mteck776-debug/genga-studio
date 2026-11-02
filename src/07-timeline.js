@@ -12,6 +12,7 @@ function buildRowsList(){
   R.push({k:'layer',o:l,l,name:l.name,ty});
   if(S.rowOpen[l.id]){
    trackNames(l).forEach(p=>R.push({k:'prop',o:l,l,p,name:PROP_LABEL[p]||p}));
+   (l.filters||[]).forEach(q=>trackNames(q).forEach(p=>R.push({k:'prop',o:q,l,p,name:`${FILTERS[q.type].label}: ${FILTER_LABEL[p]||p}`})));
    if(l.rig){l.rig.bones.forEach(b=>R.push({k:'bone',o:b,l,name:b.name}));l.rig.parts.forEach(t=>R.push({k:'part',o:t,l,name:t.name}));}
   }
  }
@@ -22,6 +23,7 @@ function rowTracks(r){
  if(r.k==='prop')return[[r.o,r.p]];
  if(r.k==='audio')return[];
  const out=trackNames(r.o).map(p=>[r.o,p]);
+ if(r.k==='layer')(r.l.filters||[]).forEach(q=>trackNames(q).forEach(p=>out.push([q,p])));
  if(r.k==='layer'&&r.l.rig){r.l.rig.bones.forEach(b=>trackNames(b).forEach(p=>out.push([b,p])));r.l.rig.parts.forEach(t=>trackNames(t).forEach(p=>out.push([t,p])));}
  return out;
 }
@@ -83,7 +85,7 @@ function peaks(s){if(s.pk)return s.pk;const ch=s.buffer.getChannelData(0),n=Math
 let TLdrag=null;
 function keyAt(mx,my){const i=Math.floor((my-RULER+S.tl.sy)/RH),r=ROWS[i];if(!r)return{r:null};const f=xf(mx-S.tl.ppf/2);let hit=null;const tr=rowTracks(r);for(const[o,p]of tr){for(const k of o.tr[p]){if(Math.abs(fx(k.f)+S.tl.ppf/2-mx)<=Math.max(6,S.tl.ppf/2)){hit=k.f;break;}}if(hit!=null)break;}return{r,i,hit,tr,f};}
 function allSelected(){const out=[];for(const id of S.keys){const[oid,p,f]=id.split('|');const o=findOwner(oid);if(!o||!o.tr||!o.tr[p])continue;const k=o.tr[p].find(q=>q.f===+f);if(k)out.push({o,p,k});}return out;}
-function findOwner(id){const sc=cur();if(sc.camera.id===id)return sc.camera;for(const l of sc.layers){if(l.id===id)return l;if(l.rig){const b=l.rig.bones.find(x=>x.id===id)||l.rig.parts.find(x=>x.id===id);if(b)return b;}}return null;}
+function findOwner(id){const sc=cur();if(sc.camera.id===id)return sc.camera;for(const l of sc.layers){if(l.id===id)return l;const q=(l.filters||[]).find(x=>x.id===id);if(q)return q;if(l.rig){const b=l.rig.bones.find(x=>x.id===id)||l.rig.parts.find(x=>x.id===id);if(b)return b;}}return null;}
 function gridPt(e){const r=grid.getBoundingClientRect();return[e.clientX-r.left,e.clientY-r.top];}
 grid.addEventListener('pointerdown',e=>{
  grid.setPointerCapture(e.pointerId);if(S.playing)stopPlay();const[mx,my]=gridPt(e);
@@ -140,12 +142,20 @@ function buildCuts(){
  S.doc.scenes.forEach((s,i)=>{
   if(i>0){h.append(el('button',{class:'tmark',title:`Transition: ${s.trans.type}`,onclick:()=>{gotoScene(i);}},{cut:'|',black:'▮',white:'▯',flash:'✦',cross:'×',wipe:'▸'}[s.trans.type]));}
   const c=mkCanvas(192,108),b=el('button',{class:'cut'+(i===S.si?' on':''),title:`${s.name}, ${(s.dur/S.doc.fps).toFixed(1)} sec`,onclick:()=>gotoScene(i)},c,el('span',{},`${s.name}`));
+  b.draggable=true;
+  b.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/x-cut',String(i));e.dataTransfer.effectAllowed='move';b.classList.add('lift');});
+  b.addEventListener('dragend',()=>{b.classList.remove('lift');$$('.cut').forEach(x=>x.classList.remove('dropL','dropR'));});
+  const side=e=>{const r=b.getBoundingClientRect();return e.clientX>r.left+r.width/2;};
+  b.addEventListener('dragover',e=>{if(![...e.dataTransfer.types].includes('text/x-cut'))return;e.preventDefault();const R=side(e);b.classList.toggle('dropR',R);b.classList.toggle('dropL',!R);});
+  b.addEventListener('dragleave',()=>b.classList.remove('dropL','dropR'));
+  b.addEventListener('drop',e=>{const v=e.dataTransfer.getData('text/x-cut');if(v==='')return;e.preventDefault();e.stopPropagation();const from=+v;let to=i+(side(e)?1:0);if(from<to)to--;moveScene(from,to);});
   h.append(b);thumbs.set(s.id,c);});
  h.append(el('button',{class:'cut add',title:'Add a new cut',onclick:addScene},'+'));
  scheduleThumbs();
 }
 let thumbT=null;
 function scheduleThumbs(){clearTimeout(thumbT);thumbT=setTimeout(()=>{const k=192/S.doc.w;S.doc.scenes.forEach(s=>{const c=thumbs.get(s.id);if(c){const g=c.getContext('2d');renderScene(g,s,Math.min(s.dur-1,Math.floor(s.dur*.6)),{base:[k,0,0,k,0,0],useCam:true,clip:true});}});},350);}
+function moveScene(from,to){const ss=S.doc.scenes;to=clamp(to,0,ss.length-1);if(from===to)return;const active=cur(),[m]=ss.splice(from,1);ss.splice(to,0,m);S.si=ss.indexOf(active);commit();buildCuts();buildInspector();toast(`Moved ${m.name}.`);}
 function gotoScene(i){S.si=i;S.frame=Math.min(S.frame,cur().dur-1);S.layerId=cur().layers[cur().layers.length-1]?.id||null;S.keys.clear();S.sel={cam:false,boneId:null,partId:null};S.setup=false;structure();}
 function addScene(){const s=newScene('Cut '+(S.doc.scenes.length+1),48);S.doc.scenes.splice(S.si+1,0,s);S.si++;S.frame=0;S.layerId=null;commit();structure();}
 function dupScene(){const sc=cur(),c=JSON.parse(JSON.stringify(sc));c.id=uid('s');c.camera.id=uid('c');c.name=sc.name+' copy';const map={};c.layers=c.layers.map(l=>{if(l.rig){const n=cloneRigLayer(l);map[l.id]=n.id;return n;}const id=uid('l');map[l.id]=id;l.id=id;return l;});c.layers.forEach(l=>{if(l.parent)l.parent=map[l.parent]||null;});S.doc.scenes.splice(S.si+1,0,c);S.si++;commit();structure();}
