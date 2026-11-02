@@ -1089,7 +1089,7 @@ function drawGrid(){
  ROWS.forEach((r,i)=>{
   const y=RULER+i*RH-S.tl.sy;if(y+RH<RULER||y>h)return;
   gx.strokeStyle='#2a2f3d';gx.beginPath();gx.moveTo(0,y+RH-.5);gx.lineTo(w,y+RH-.5);gx.stroke();const cy=y+RH/2;
-  if(r.k==='layer'&&r.l.type==='draw'){r.l.cels.forEach((c,j)=>{const nx=r.l.cels[j+1]?r.l.cels[j+1].f:sc.dur,x0=fx(c.f),x1=fx(nx);gx.fillStyle=c.a?'#3b4a6b':'#2a2f3d';gx.fillRect(x0,y+3,x1-x0-1,RH-7);gx.fillStyle=c.a?'#ffd98c':'#6b7186';gx.beginPath();gx.arc(x0+ppf/2,cy-1,Math.min(4,ppf*.4),0,7);if(c.a)gx.fill();else{gx.strokeStyle=gx.fillStyle;gx.stroke();}});}
+  if(r.k==='layer'&&r.l.type==='draw'){r.l.cels.forEach((c,j)=>{const nx=r.l.cels[j+1]?r.l.cels[j+1].f:sc.dur,x0=fx(c.f),x1=fx(nx);gx.fillStyle=c.a?'#3b4a6b':'#2a2f3d';gx.fillRect(x0,y+3,x1-x0-1,RH-7);gx.fillStyle=c.a?'#ffd98c':'#6b7186';const on=S.keys.has(celId(r.l,c.f));if(on)gx.fillStyle='#57b6ff';gx.beginPath();gx.arc(x0+ppf/2,cy-1,Math.min(on?5:4,ppf*.45),0,7);if(c.a||on)gx.fill();else{gx.strokeStyle=gx.fillStyle;gx.stroke();}if(on){gx.strokeStyle='#fff';gx.stroke();}});}
   if(r.k==='audio'){const c=r.clip,st=sceneStart(S.si),s=Sounds.get(c.asset);if(s){const x0=fx(c.start-st),wd=s.buffer.duration*d.fps*ppf;gx.fillStyle='#2b4a48';gx.fillRect(x0,y+2,wd,RH-5);const pk=peaks(s);gx.strokeStyle='#6fd3a4';gx.beginPath();const a=Math.max(0,-x0|0),b=Math.min(wd,w-x0)|0;for(let px=a;px<b;px+=2){const v=pk[Math.floor(px/wd*pk.length)]||0,X=x0+px+.5;gx.moveTo(X,cy-1-v*8);gx.lineTo(X,cy-1+v*8);}gx.stroke();}return;}
   const tr=rowTracks(r),seen=new Map();tr.forEach(([o,p])=>o.tr[p].forEach(k=>{const e=seen.get(k.f)||{sel:false,hold:false};if(S.keys.has(keyId(o,p,k.f)))e.sel=true;if(k.e==='hold')e.hold=true;seen.set(k.f,e);}));
   if(r.k!=='layer'||!r.l.rig){const fs=[...seen.keys()].sort((a,b)=>a-b);if(fs.length>1){gx.fillStyle='rgba(255,106,92,.13)';gx.fillRect(fx(fs[0])+ppf/2,cy-3,fx(fs[fs.length-1])-fx(fs[0]),6);}}
@@ -1108,6 +1108,11 @@ function drawGrid(){
 function peaks(s){if(s.pk)return s.pk;const ch=s.buffer.getChannelData(0),n=Math.min(6000,Math.ceil(s.buffer.duration*60)),o=new Float32Array(n),st=Math.floor(ch.length/n);for(let i=0;i<n;i++){let m=0;for(let j=0;j<st;j+=8){const v=Math.abs(ch[i*st+j]||0);if(v>m)m=v;}o[i]=m;}return s.pk=o;}
 let TLdrag=null;
 function keyAt(mx,my){const i=Math.floor((my-RULER+S.tl.sy)/RH),r=ROWS[i];if(!r)return{r:null};const f=xf(mx-S.tl.ppf/2);let hit=null;const tr=rowTracks(r);for(const[o,p]of tr){for(const k of o.tr[p]){if(Math.abs(fx(k.f)+S.tl.ppf/2-mx)<=Math.max(6,S.tl.ppf/2)){hit=k.f;break;}}if(hit!=null)break;}return{r,i,hit,tr,f};}
+const celId=(l,f)=>`${l.id}|@cel|${f}`;
+function selectedCels(){const out=[];for(const id of S.keys){const[lid,p,f]=id.split('|');if(p!=='@cel')continue;const l=cur().layers.find(x=>x.id===lid),c=l&&l.cels&&l.cels.find(q=>q.f===+f);if(c)out.push({l,cel:c});}return out;}
+function dragItems(){return[...allSelected().map(a=>({...a,f0:a.k.f})),...selectedCels().map(a=>({...a,f0:a.cel.f}))];}
+function refreshSel(items){S.keys=new Set(items.map(a=>a.cel?celId(a.l,a.cel.f):keyId(a.o,a.p,a.k.f)));}
+function dedupeCels(items){new Set(items.filter(a=>a.cel).map(a=>a.l)).forEach(l=>{l.cels.sort((a,b)=>a.f-b.f);const moved=new Set(items.map(a=>a.cel));for(let i=l.cels.length-1;i>0;i--)if(l.cels[i].f===l.cels[i-1].f)l.cels.splice(moved.has(l.cels[i])?i-1:i,1);});}
 function allSelected(){const out=[];for(const id of S.keys){const[oid,p,f]=id.split('|');const o=findOwner(oid);if(!o||!o.tr||!o.tr[p])continue;const k=o.tr[p].find(q=>q.f===+f);if(k)out.push({o,p,k});}return out;}
 function findOwner(id){const sc=cur();if(sc.camera.id===id)return sc.camera;for(const l of sc.layers){if(l.id===id)return l;const q=(l.filters||[]).find(x=>x.id===id);if(q)return q;if(l.rig){const b=l.rig.bones.find(x=>x.id===id)||l.rig.parts.find(x=>x.id===id);if(b)return b;}}return null;}
 function gridPt(e){const r=grid.getBoundingClientRect();return[e.clientX-r.left,e.clientY-r.top];}
@@ -1116,25 +1121,26 @@ grid.addEventListener('pointerdown',e=>{
  if(my<RULER){if(Math.abs(mx-fx(cur().dur))<6){TLdrag={dur:1};return;}TLdrag={scrub:1};setFrame(xf(mx-S.tl.ppf/2));return;}
  const h=keyAt(mx,my);
  if(h.r&&h.r.k==='audio'){const c=h.r.clip;TLdrag={clip:c,x:mx,st:c.start};return;}
- if(h.r&&h.r.k==='layer'&&h.r.l.type==='draw'&&h.hit==null){const c=h.r.l.cels.find(q=>Math.abs(fx(q.f)-mx)<6||(mx>=fx(q.f)&&mx<fx(q.f)+Math.min(S.tl.ppf,14)));if(c&&c.f>=0){if(S.layerId!==h.r.l.id)selectLayer(h.r.l.id);TLdrag={cel:c,l:h.r.l,x:mx,f:c.f};setFrame(c.f);return;}}
+ if(h.r&&h.r.k==='layer'&&h.r.l.cels&&e.shiftKey&&S.anchor&&S.anchor.l===h.r.l.id){const f=h.hit!=null?h.hit:xf(mx-S.tl.ppf/2),a=Math.min(f,S.anchor.f),b=Math.max(f,S.anchor.f);h.r.l.cels.forEach(c=>{if(c.f>=a&&c.f<=b)S.keys.add(celId(h.r.l,c.f));});h.tr.forEach(([o,p])=>o.tr[p].forEach(k=>{if(k.f>=a&&k.f<=b)S.keys.add(keyId(o,p,k.f));}));buildInspector();invalidate();return;}
+ if(h.r&&h.r.k==='layer'&&h.r.l.type==='draw'&&h.hit==null){const c=h.r.l.cels.find(q=>Math.abs(fx(q.f)-mx)<6||(mx>=fx(q.f)&&mx<fx(q.f)+Math.min(S.tl.ppf,14)));if(c&&c.f>=0){const l=h.r.l,id=celId(l,c.f);if(S.layerId!==l.id)selectLayer(l.id);if(!S.keys.has(id)){if(!e.shiftKey)S.keys.clear();S.keys.add(id);}else if(e.shiftKey)S.keys.delete(id);S.anchor={l:l.id,f:c.f};buildInspector();setFrame(c.f);TLdrag={keys:dragItems(),x:mx,df:0};invalidate();return;}}
  if(h.r&&h.hit!=null){
   const anySel=h.tr.some(([o,p])=>S.keys.has(keyId(o,p,h.hit)));
   if(!anySel){if(!e.shiftKey)S.keys.clear();h.tr.forEach(([o,p])=>{if(o.tr[p].some(k=>k.f===h.hit))S.keys.add(keyId(o,p,h.hit));});}
   else if(e.shiftKey){h.tr.forEach(([o,p])=>S.keys.delete(keyId(o,p,h.hit)));}
+  if(h.r.k==='layer'&&h.r.l.cels){const c=h.r.l.cels.find(q=>q.f===h.hit);if(c)S.keys.add(celId(h.r.l,c.f));S.anchor={l:h.r.l.id,f:h.hit};}
   buildInspector();setFrame(h.hit);
-  TLdrag={keys:allSelected().map(a=>({...a,f0:a.k.f})),x:mx,df:0};invalidate();return;}
+  TLdrag={keys:dragItems(),x:mx,df:0};invalidate();return;}
  if(!e.shiftKey){S.keys.clear();buildInspector();}
  TLdrag={marq:[mx,my,mx,my],sx:mx,sy:my,base:new Set(S.keys)};invalidate();});
 grid.addEventListener('pointermove',e=>{if(!TLdrag)return;const[mx,my]=gridPt(e);
  if(TLdrag.scrub)setFrame(xf(mx-S.tl.ppf/2));
  else if(TLdrag.dur){cur().dur=Math.max(1,xf(mx));S.frame=Math.min(S.frame,cur().dur-1);syncDur();invalidate();}
  else if(TLdrag.clip){TLdrag.clip.start=Math.max(0,TLdrag.st+Math.round((mx-TLdrag.x)/S.tl.ppf));invalidate();}
- else if(TLdrag.cel){const D=TLdrag,nf=Math.max(0,D.f+Math.round((mx-D.x)/S.tl.ppf));if(!D.l.cels.some(c=>c!==D.cel&&c.f===nf)){D.cel.f=nf;D.l.cels.sort((a,b)=>a.f-b.f);}invalidate();}
- else if(TLdrag.keys){const D=TLdrag,df=Math.round((mx-D.x)/S.tl.ppf);const min=Math.min(...D.keys.map(k=>k.f0));const dd=Math.max(df,-min);D.df=dd;D.keys.forEach(a=>{a.k.f=a.f0+dd;});const owners=new Set(D.keys.map(a=>a.o.tr[a.p]));owners.forEach(t=>t.sort((a,b)=>a.f-b.f));invalidate();}
- else if(TLdrag.marq){const D=TLdrag;D.marq=[Math.min(D.sx,mx),Math.min(D.sy,my),Math.max(D.sx,mx),Math.max(D.sy,my)];S.keys=new Set(D.base);const m=D.marq;ROWS.forEach((r,i)=>{const y=RULER+i*RH-S.tl.sy+RH/2;if(y<m[1]||y>m[3])return;rowTracks(r).forEach(([o,p])=>o.tr[p].forEach(k=>{const x=fx(k.f)+S.tl.ppf/2;if(x>=m[0]&&x<=m[2])S.keys.add(keyId(o,p,k.f));}));});invalidate();}});
+ else if(TLdrag.keys){const D=TLdrag,df=Math.round((mx-D.x)/S.tl.ppf);const min=Math.min(...D.keys.map(k=>k.f0));const dd=Math.max(df,-min);D.df=dd;D.keys.forEach(a=>{if(a.cel)a.cel.f=a.f0+dd;else a.k.f=a.f0+dd;});new Set(D.keys.filter(a=>!a.cel).map(a=>a.o.tr[a.p])).forEach(t=>t.sort((a,b)=>a.f-b.f));new Set(D.keys.filter(a=>a.cel).map(a=>a.l)).forEach(l=>l.cels.sort((a,b)=>a.f-b.f));invalidate();}
+ else if(TLdrag.marq){const D=TLdrag;D.marq=[Math.min(D.sx,mx),Math.min(D.sy,my),Math.max(D.sx,mx),Math.max(D.sy,my)];S.keys=new Set(D.base);const m=D.marq;ROWS.forEach((r,i)=>{const y=RULER+i*RH-S.tl.sy+RH/2;if(y<m[1]||y>m[3])return;rowTracks(r).forEach(([o,p])=>o.tr[p].forEach(k=>{const x=fx(k.f)+S.tl.ppf/2;if(x>=m[0]&&x<=m[2])S.keys.add(keyId(o,p,k.f));}));if(r.k==='layer'&&r.l.cels)r.l.cels.forEach(c=>{const x=fx(c.f)+S.tl.ppf/2;if(x>=m[0]&&x<=m[2])S.keys.add(celId(r.l,c.f));});});invalidate();}});
 const gridUp=()=>{if(!TLdrag)return;const D=TLdrag;TLdrag=null;
- if(D.keys&&D.df){const ts=new Set();D.keys.forEach(a=>ts.add(a.o.tr[a.p]));ts.forEach(t=>{for(let i=t.length-1;i>0;i--)if(t[i].f===t[i-1].f)t.splice(D.keys.some(a=>a.k===t[i])?i-1:i,1);});S.keys=new Set(D.keys.map(a=>keyId(a.o,a.p,a.k.f)));commit();}
- else if(D.dur){commit();buildCuts();}else if(D.clip||D.cel)commit();
+ if(D.keys&&D.df){const ts=new Set();D.keys.forEach(a=>{if(!a.cel)ts.add(a.o.tr[a.p]);});ts.forEach(t=>{for(let i=t.length-1;i>0;i--)if(t[i].f===t[i-1].f)t.splice(D.keys.some(a=>a.k===t[i])?i-1:i,1);});dedupeCels(D.keys);refreshSel(D.keys.filter(a=>a.cel?a.l.cels.includes(a.cel):a.o.tr[a.p].includes(a.k)));commit();}
+ else if(D.dur){commit();buildCuts();}else if(D.clip)commit();
  else if(D.marq){buildInspector();invalidate();}};
 grid.addEventListener('pointerup',gridUp);grid.addEventListener('pointercancel',gridUp);
 $('#tlBody').addEventListener('wheel',e=>{e.preventDefault();
@@ -1143,10 +1149,10 @@ $('#tlBody').addEventListener('wheel',e=>{e.preventDefault();
  else{const max=Math.max(0,ROWS.length*RH-grid.clientHeight+RULER+8);S.tl.sy=clamp(S.tl.sy+e.deltaY,0,max);const ri=$('#rowsIn');if(ri)ri.style.transform=`translateY(${-S.tl.sy}px)`;}
  invalidate();},{passive:false});
 /* key operations */
-function deleteSelected(){if(S.keys.size){allSelected().forEach(({o,p,k})=>delKey(o,p,k.f));S.keys.clear();commit();structure();return true;}return false;}
+function deleteSelected(){if(S.keys.size){selectedCels().forEach(({l,cel})=>{l.cels=l.cels.filter(c=>c!==cel);});allSelected().forEach(({o,p,k})=>delKey(o,p,k.f));S.keys.clear();commit();structure();return true;}return false;}
 let Clip=null;
-function copyKeys(){const a=allSelected();if(!a.length)return;const min=Math.min(...a.map(x=>x.k.f));Clip=a.map(x=>({oid:x.o.id,p:x.p,df:x.k.f-min,v:JSON.parse(JSON.stringify(x.k.v)),e:x.k.e}));toast(`Copied ${a.length} keyframes.`);}
-function pasteKeys(){if(!Clip)return;S.keys.clear();Clip.forEach(c=>{const o=findOwner(c.oid);if(!o)return;const f=S.frame+c.df;setKey(o,c.p,f,c.v,c.e);S.keys.add(keyId(o,c.p,f));});commit();}
+function copyKeys(){const a=allSelected(),cs=selectedCels();if(!a.length&&!cs.length)return;const min=Math.min(...a.map(x=>x.k.f),...cs.map(x=>x.cel.f));Clip=[...a.map(x=>({oid:x.o.id,p:x.p,df:x.k.f-min,v:JSON.parse(JSON.stringify(x.k.v)),e:x.k.e})),...cs.map(x=>({lid:x.l.id,df:x.cel.f-min,a:x.cel.a,x:x.cel.x,y:x.cel.y}))];toast(`Copied ${Clip.length} keyframes.`);}
+function pasteKeys(){if(!Clip)return;S.keys.clear();Clip.forEach(c=>{const f=S.frame+c.df;if(c.lid){const l=cur().layers.find(x=>x.id===c.lid);if(!l)return;l.cels=l.cels.filter(q=>q.f!==f);l.cels.push({f,a:c.a,x:c.x,y:c.y});l.cels.sort((a,b)=>a.f-b.f);S.keys.add(celId(l,f));return;}const o=findOwner(c.oid);if(!o)return;setKey(o,c.p,f,c.v,c.e);S.keys.add(keyId(o,c.p,f));});commit();}
 /* transport */
 function syncDur(){const i=$('#cutLen');if(i&&document.activeElement!==i)i.value=cur().dur;}
 function buildTransport(){
@@ -1200,6 +1206,28 @@ function startPlay(){S.playing=true;const d=S.doc;let g0=sceneStart(S.si)+S.fram
  requestAnimationFrame(tick);}
 function stopPlay(){S.playing=false;stopAudio();const b=$('#btnPlay');if(b)b.textContent='▶';invalidate();}
 
+/* spread or squeeze timing: works on the selection, or on the whole active layer when nothing is selected */
+function retimeTargets(){
+ let items=[...allSelected().map(a=>({key:a.k,t:a.o.tr[a.p],o:a.o})),...selectedCels().map(a=>({cel:a.cel,l:a.l}))];let scope='selection';
+ if(!items.length){scope='layer';const l=layer();const owners=[];if(S.sel.cam)owners.push(cur().camera);else if(l){const b=bone(),p=part();if(b)owners.push(b);else if(p)owners.push(p);else{owners.push(l,...(l.filters||[]));if(l.rig)owners.push(...l.rig.bones,...l.rig.parts);if(l.cels)l.cels.forEach(c=>items.push({cel:c,l}));}}owners.forEach(o=>trackNames(o).forEach(p=>o.tr[p].forEach(k=>items.push({key:k,t:o.tr[p],o}))));}
+ return{items,scope};}
+function retime(mode,n){
+ const{items}=retimeTargets();if(!items.length)return toast('Nothing to space out yet.');
+ const fOf=a=>a.cel?a.cel.f:a.key.f,U=[...new Set(items.map(fOf))].sort((a,b)=>a-b);if(U.length<2)return toast('Select at least two keys on different frames.');
+ const first=U[0],last=U[U.length-1],map=new Map();let prev=-1e9;
+ U.forEach((f,i)=>{let nf=mode==='even'?first+i*n:first+Math.round((f-first)*n);nf=Math.max(nf,prev+1);map.set(f,nf);prev=nf;});
+ const delta=map.get(last)-last,tracks=new Set(items.filter(a=>a.t).map(a=>a.t)),layers=new Set(items.filter(a=>a.l).map(a=>a.l)),picked=new Set(items.map(a=>a.cel||a.key));
+ /* later keys on the same tracks slide along so nothing lands on top of them */
+ if(S.ripple!==false){tracks.forEach(t=>t.forEach(k=>{if(!picked.has(k)&&k.f>last)k.f+=delta;}));layers.forEach(l=>l.cels.forEach(c=>{if(!picked.has(c)&&c.f>last)c.f+=delta;}));}
+ items.forEach(a=>{if(a.cel)a.cel.f=map.get(a.cel.f);else if(!a.done){a.key.f=map.get(a.key.f);}});
+ tracks.forEach(t=>t.sort((a,b)=>a.f-b.f));layers.forEach(l=>l.cels.sort((a,b)=>a.f-b.f));
+ if(S.keys.size)S.keys=new Set(retimeIds(items));
+ const sc=cur();let msg=`Spaced ${U.length} keys over ${map.get(last)-first+1} frames.`;if(delta>0&&S.ripple!==false&&last<sc.dur){sc.dur+=delta;msg+=` This cut is now ${sc.dur} frames.`;}
+ const maxF=Math.max(...[...map.values()]);if(maxF>=sc.dur){sc.dur=maxF+1;msg=`Spaced ${U.length} keys. This cut is now ${sc.dur} frames.`;}
+ S.frame=Math.min(S.frame,sc.dur-1);commit();structure();toast(msg);}
+function retimeIds(items){const out=[];items.forEach(a=>{if(a.cel)out.push(celId(a.l,a.cel.f));else for(const p in a.o.tr)if(a.o.tr[p]===a.t)out.push(keyId(a.o,p,a.key.f));});return out;}
+function selectAllKeys(){S.keys.clear();const l=layer();if(S.sel.cam){const c=cur().camera;trackNames(c).forEach(p=>c.tr[p].forEach(k=>S.keys.add(keyId(c,p,k.f))));}else if(l){const r={k:'layer',o:l,l};rowTracks(r).forEach(([o,p])=>o.tr[p].forEach(k=>S.keys.add(keyId(o,p,k.f))));(l.cels||[]).forEach(c=>S.keys.add(celId(l,c.f)));}buildInspector();invalidate();toast(`Selected ${S.keys.size} keys.`);}
+
 /* ---------- tool strip and option bar ---------- */
 const I=(d)=>`<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
 const TOOLS=[
@@ -1250,7 +1278,8 @@ function syncInspector(){for(const b of Binds){if(document.activeElement!==b.inp
 const BLENDS=[['source-over','Normal'],['screen','Screen'],['lighter','Add'],['multiply','Multiply'],['overlay','Overlay'],['soft-light','Soft light'],['color-dodge','Colour dodge'],['hard-light','Hard light']];
 function buildInspector(){
  Binds=[];const h=$('#inspBody');h.innerHTML='';const l=layer(),sc=cur();
- if(S.keys.size)h.append(easeSection());
+ const rt=spreadSection();if(rt)h.append(rt);
+ if(allSelected().length)h.append(easeSection());
  if(S.sel.cam){const c=sc.camera;h.append(sec('Camera',nr(c,'x','Pan X'),nr(c,'y','Pan Y'),nr(c,'zoom','Zoom',{step:.01,min:.05,max:20}),nr(c,'rot','Roll',{step:.2}),nr(c,'shake','Shake',{step:.5,min:0}),el('p',{class:'hint'},'Set depth on each layer for multiplane parallax: 0 stays still, 1 moves with the camera, above 1 passes faster in the foreground.')));}
  else if(l){
   h.append(layerHead(l));
@@ -1332,6 +1361,14 @@ function scenePanel(sc){const t=sc.trans;return sec('This cut',row('Name',el('in
  row('Way in',sel('sTr',[['cut','Hard cut'],['black','Dip to black'],['white','Dip to white'],['flash','Flash'],['cross','Cross fade'],['wipe','Wipe']],t.type,v=>{t.type=v;commit();buildCuts();})),row('Transition',el('input',{id:'sTd',type:'number',min:2,value:t.dur,title:'Length in frames',onchange:e=>{t.dur=Math.max(2,+e.target.value);commit();}})),
  el('div',{class:'btns'},el('button',{onclick:()=>moveScene(S.si,S.si-1),disabled:S.si===0},'Move earlier'),el('button',{onclick:()=>moveScene(S.si,S.si+1),disabled:S.si===S.doc.scenes.length-1},'Move later'),el('button',{onclick:dupScene},'Duplicate cut'),el('button',{onclick:delScene},'Delete cut')),el('p',{class:'hint'},'You can also drag cuts along the strip to reorder them. Sound stays where it is on the film.'));}
 /* easing editor */
+function spreadSection(){
+ const{items,scope}=retimeTargets(),n=new Set(items.map(a=>a.cel?a.cel.f:a.key.f)).size;if(n<2)return null;
+ const ev=el('input',{id:'spEven',type:'number',min:1,max:48,step:1,value:S.spEven||2,style:'width:60px',onkeydown:e=>e.stopPropagation(),onchange:e=>{S.spEven=Math.max(1,+e.target.value||1);}});
+ const st=el('input',{id:'spMul',type:'number',min:.1,max:10,step:.1,value:S.spMul||2,style:'width:60px',onkeydown:e=>e.stopPropagation(),onchange:e=>{S.spMul=Math.max(.1,+e.target.value||1);}});
+ return sec('Spread keys',el('p',{class:'hint'},scope==='selection'?`${n} selected frames.`:`All ${n} key frames on this ${S.sel.cam?'camera':part()?'part':bone()?'bone':'layer'}. To spread only some, click the first in the timeline, then Shift+click the last.`),
+  row('One every',el('span',{class:'swr'},ev,'frames',el('button',{id:'spGo',title:'Place the keys evenly, this many frames apart',onclick:()=>retime('even',+ev.value||1)},'Space')),el('span')),
+  row('Stretch by',el('span',{class:'swr'},st,'times',el('button',{id:'spStr',title:'Keep the rhythm and make it longer or shorter. Under 1 speeds it up.',onclick:()=>retime('stretch',+st.value||1)},'Stretch')),el('span')),
+  el('label',{style:'display:flex;gap:6px;color:var(--mute)'},el('input',{id:'spRip',type:'checkbox',checked:S.ripple!==false,onchange:e=>S.ripple=e.target.checked}),'Push later keys along'));}
 function easeSection(){
  const a=allSelected();const first=a[0]?.k.e;const e0=Array.isArray(first)?first.slice():first==='hold'?null:[0,0,1,1];
  const c=el('canvas',{id:'curve'});const g=()=>c.getContext('2d');let cur_=e0;const wrap=el('div',{class:'sec'});
@@ -1353,8 +1390,8 @@ function buildMenus(){const h=$('#menus');h.replaceChildren(
  el('button',{onclick:openGuide},'Guide'));}
 function addNew(t,k){const d=S.doc;let l;if(t==='draw'){l=newLayer('draw','Drawing',{cels:[]});l.p.x=l.p.ax=d.w/2;l.p.y=l.p.ay=d.h/2;}if(t==='text'){l=textLayer('Your words here',d.w/2,d.h/2,{});l.screen=false;}if(t==='solid'){l=newLayer('solid','Solid colour',{color:'#223355'});}if(t==='rig'){l=newLayer('rig','Character rig',{rig:{bones:[],parts:[]}});}if(t==='fx')l=fxLayer(k);addLayer(l);if(t==='rig')S.setup=true;if(t==='fx'&&l.fx==='gradient'){const ls=cur().layers;ls.splice(ls.indexOf(l),1);ls.unshift(l);}structure();commit();}
 function openGuide(){dialog(el('div',{class:'dlg'},el('h2',{},'Making a shot in Genga'),
- el('ol',{},el('li',{},'Get your art in. Draw on a drawing layer, or use Add > Layered PSD to bring each Photoshop layer in as a part. With a flat image, use the Lasso to cut it into parts.'),el('li',{},'Rig it. Select the rig layer, choose Set up, and draw bones with the Bone tool (J) from the hips outward. Press Auto-bind for stiff parts. For bending parts, tick their bones and press Bind smooth.'),el('li',{},'Animate. Switch to Animate, move the playhead, and pose with the Pose tool (P). Auto-key records each pose. Drag keys in the timeline to retime them.'),el('li',{},'Give it the anime feel. Set Animate on to Twos or Threes, use Snap easing on fast moves, and hold poses. Add Impact frame, Speed lines and Colour fringe for big beats. Add the Sketchy lines filter in the panel to make lines wobble as it plays.'),el('li',{},'Direct it. Use cuts for each shot, move the Camera, set layer Depth for parallax, then add music with Add > Sound.'),el('li',{},'Save the project often, then press Export video.')),
- el('h3',{},'Shortcuts'),el('div',{class:'keys',html:[['Space','Play'],[', .','Step a frame'],['F6 / K','Keyframe'],['F7','Blank drawing'],['F5','Hold longer'],['[ ]','Brush size'],['V','Select'],['B','Brush'],['E','Eraser'],['G','Fill'],['A','Lasso'],['J','Bone'],['P','Pose'],['D','Deform'],['W','Weights'],['M','Pin bone'],['C','Camera'],['Ctrl Z','Undo'],['Ctrl S','Save'],['Ctrl C / V','Copy keys'],['Delete','Remove keys'],['Ctrl wheel','Zoom timeline']].map(k=>`<span><kbd>${k[0]}</kbd>${k[1]}</span>`).join('')}),
+ el('ol',{},el('li',{},'Get your art in. Draw on a drawing layer, or use Add > Layered PSD to bring each Photoshop layer in as a part. With a flat image, use the Lasso to cut it into parts.'),el('li',{},'Rig it. Select the rig layer, choose Set up, and draw bones with the Bone tool (J) from the hips outward. Press Auto-bind for stiff parts. For bending parts, tick their bones and press Bind smooth.'),el('li',{},'Animate. Switch to Animate, move the playhead, and pose with the Pose tool (P). Auto-key records each pose. Drag keys in the timeline to retime them, or use Spread keys in the side panel to space them out.'),el('li',{},'Give it the anime feel. Set Animate on to Twos or Threes, use Snap easing on fast moves, and hold poses. Add Impact frame, Speed lines and Colour fringe for big beats. Add the Sketchy lines filter in the panel to make lines wobble as it plays.'),el('li',{},'Direct it. Use cuts for each shot, move the Camera, set layer Depth for parallax, then add music with Add > Sound.'),el('li',{},'Save the project often, then press Export video.')),
+ el('h3',{},'Shortcuts'),el('div',{class:'keys',html:[['Space','Play'],[', .','Step a frame'],['F6 / K','Keyframe'],['F7','Blank drawing'],['F5','Hold longer'],['[ ]','Brush size'],['V','Select'],['B','Brush'],['E','Eraser'],['G','Fill'],['A','Lasso'],['J','Bone'],['P','Pose'],['D','Deform'],['W','Weights'],['M','Pin bone'],['C','Camera'],['Ctrl Z','Undo'],['Ctrl S','Save'],['Ctrl A','Select layer keys'],['Ctrl C / V','Copy keys'],['Delete','Remove keys'],['Ctrl wheel','Zoom timeline']].map(k=>`<span><kbd>${k[0]}</kbd>${k[1]}</span>`).join('')}),
  el('div',{class:'acts'},el('button',{class:'primary',onclick:closeDialog},'Got it'))));}
 function dialog(c){const m=$('#modal');m.replaceChildren(c);m.hidden=false;}
 function closeDialog(){$('#modal').hidden=true;}
@@ -1367,6 +1404,7 @@ addEventListener('keydown',e=>{
  if(mod&&lk==='y'){e.preventDefault();Hist.go(1);return;}
  if(mod&&lk==='s'){e.preventDefault();saveProject();return;}
  if(mod&&lk==='o'){e.preventDefault();openProject();return;}
+ if(mod&&lk==='a'){e.preventDefault();selectAllKeys();return;}
  if(mod&&lk==='c'){copyKeys();return;}if(mod&&lk==='v'){pasteKeys();return;}
  if(mod)return;
  if(k===' '){e.preventDefault();if(!e.repeat){Ptr.space=true;spaceTap=true;}return;}

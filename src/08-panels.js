@@ -48,7 +48,8 @@ function syncInspector(){for(const b of Binds){if(document.activeElement!==b.inp
 const BLENDS=[['source-over','Normal'],['screen','Screen'],['lighter','Add'],['multiply','Multiply'],['overlay','Overlay'],['soft-light','Soft light'],['color-dodge','Colour dodge'],['hard-light','Hard light']];
 function buildInspector(){
  Binds=[];const h=$('#inspBody');h.innerHTML='';const l=layer(),sc=cur();
- if(S.keys.size)h.append(easeSection());
+ const rt=spreadSection();if(rt)h.append(rt);
+ if(allSelected().length)h.append(easeSection());
  if(S.sel.cam){const c=sc.camera;h.append(sec('Camera',nr(c,'x','Pan X'),nr(c,'y','Pan Y'),nr(c,'zoom','Zoom',{step:.01,min:.05,max:20}),nr(c,'rot','Roll',{step:.2}),nr(c,'shake','Shake',{step:.5,min:0}),el('p',{class:'hint'},'Set depth on each layer for multiplane parallax: 0 stays still, 1 moves with the camera, above 1 passes faster in the foreground.')));}
  else if(l){
   h.append(layerHead(l));
@@ -130,6 +131,14 @@ function scenePanel(sc){const t=sc.trans;return sec('This cut',row('Name',el('in
  row('Way in',sel('sTr',[['cut','Hard cut'],['black','Dip to black'],['white','Dip to white'],['flash','Flash'],['cross','Cross fade'],['wipe','Wipe']],t.type,v=>{t.type=v;commit();buildCuts();})),row('Transition',el('input',{id:'sTd',type:'number',min:2,value:t.dur,title:'Length in frames',onchange:e=>{t.dur=Math.max(2,+e.target.value);commit();}})),
  el('div',{class:'btns'},el('button',{onclick:()=>moveScene(S.si,S.si-1),disabled:S.si===0},'Move earlier'),el('button',{onclick:()=>moveScene(S.si,S.si+1),disabled:S.si===S.doc.scenes.length-1},'Move later'),el('button',{onclick:dupScene},'Duplicate cut'),el('button',{onclick:delScene},'Delete cut')),el('p',{class:'hint'},'You can also drag cuts along the strip to reorder them. Sound stays where it is on the film.'));}
 /* easing editor */
+function spreadSection(){
+ const{items,scope}=retimeTargets(),n=new Set(items.map(a=>a.cel?a.cel.f:a.key.f)).size;if(n<2)return null;
+ const ev=el('input',{id:'spEven',type:'number',min:1,max:48,step:1,value:S.spEven||2,style:'width:60px',onkeydown:e=>e.stopPropagation(),onchange:e=>{S.spEven=Math.max(1,+e.target.value||1);}});
+ const st=el('input',{id:'spMul',type:'number',min:.1,max:10,step:.1,value:S.spMul||2,style:'width:60px',onkeydown:e=>e.stopPropagation(),onchange:e=>{S.spMul=Math.max(.1,+e.target.value||1);}});
+ return sec('Spread keys',el('p',{class:'hint'},scope==='selection'?`${n} selected frames.`:`All ${n} key frames on this ${S.sel.cam?'camera':part()?'part':bone()?'bone':'layer'}. To spread only some, click the first in the timeline, then Shift+click the last.`),
+  row('One every',el('span',{class:'swr'},ev,'frames',el('button',{id:'spGo',title:'Place the keys evenly, this many frames apart',onclick:()=>retime('even',+ev.value||1)},'Space')),el('span')),
+  row('Stretch by',el('span',{class:'swr'},st,'times',el('button',{id:'spStr',title:'Keep the rhythm and make it longer or shorter. Under 1 speeds it up.',onclick:()=>retime('stretch',+st.value||1)},'Stretch')),el('span')),
+  el('label',{style:'display:flex;gap:6px;color:var(--mute)'},el('input',{id:'spRip',type:'checkbox',checked:S.ripple!==false,onchange:e=>S.ripple=e.target.checked}),'Push later keys along'));}
 function easeSection(){
  const a=allSelected();const first=a[0]?.k.e;const e0=Array.isArray(first)?first.slice():first==='hold'?null:[0,0,1,1];
  const c=el('canvas',{id:'curve'});const g=()=>c.getContext('2d');let cur_=e0;const wrap=el('div',{class:'sec'});
@@ -151,8 +160,8 @@ function buildMenus(){const h=$('#menus');h.replaceChildren(
  el('button',{onclick:openGuide},'Guide'));}
 function addNew(t,k){const d=S.doc;let l;if(t==='draw'){l=newLayer('draw','Drawing',{cels:[]});l.p.x=l.p.ax=d.w/2;l.p.y=l.p.ay=d.h/2;}if(t==='text'){l=textLayer('Your words here',d.w/2,d.h/2,{});l.screen=false;}if(t==='solid'){l=newLayer('solid','Solid colour',{color:'#223355'});}if(t==='rig'){l=newLayer('rig','Character rig',{rig:{bones:[],parts:[]}});}if(t==='fx')l=fxLayer(k);addLayer(l);if(t==='rig')S.setup=true;if(t==='fx'&&l.fx==='gradient'){const ls=cur().layers;ls.splice(ls.indexOf(l),1);ls.unshift(l);}structure();commit();}
 function openGuide(){dialog(el('div',{class:'dlg'},el('h2',{},'Making a shot in Genga'),
- el('ol',{},el('li',{},'Get your art in. Draw on a drawing layer, or use Add > Layered PSD to bring each Photoshop layer in as a part. With a flat image, use the Lasso to cut it into parts.'),el('li',{},'Rig it. Select the rig layer, choose Set up, and draw bones with the Bone tool (J) from the hips outward. Press Auto-bind for stiff parts. For bending parts, tick their bones and press Bind smooth.'),el('li',{},'Animate. Switch to Animate, move the playhead, and pose with the Pose tool (P). Auto-key records each pose. Drag keys in the timeline to retime them.'),el('li',{},'Give it the anime feel. Set Animate on to Twos or Threes, use Snap easing on fast moves, and hold poses. Add Impact frame, Speed lines and Colour fringe for big beats. Add the Sketchy lines filter in the panel to make lines wobble as it plays.'),el('li',{},'Direct it. Use cuts for each shot, move the Camera, set layer Depth for parallax, then add music with Add > Sound.'),el('li',{},'Save the project often, then press Export video.')),
- el('h3',{},'Shortcuts'),el('div',{class:'keys',html:[['Space','Play'],[', .','Step a frame'],['F6 / K','Keyframe'],['F7','Blank drawing'],['F5','Hold longer'],['[ ]','Brush size'],['V','Select'],['B','Brush'],['E','Eraser'],['G','Fill'],['A','Lasso'],['J','Bone'],['P','Pose'],['D','Deform'],['W','Weights'],['M','Pin bone'],['C','Camera'],['Ctrl Z','Undo'],['Ctrl S','Save'],['Ctrl C / V','Copy keys'],['Delete','Remove keys'],['Ctrl wheel','Zoom timeline']].map(k=>`<span><kbd>${k[0]}</kbd>${k[1]}</span>`).join('')}),
+ el('ol',{},el('li',{},'Get your art in. Draw on a drawing layer, or use Add > Layered PSD to bring each Photoshop layer in as a part. With a flat image, use the Lasso to cut it into parts.'),el('li',{},'Rig it. Select the rig layer, choose Set up, and draw bones with the Bone tool (J) from the hips outward. Press Auto-bind for stiff parts. For bending parts, tick their bones and press Bind smooth.'),el('li',{},'Animate. Switch to Animate, move the playhead, and pose with the Pose tool (P). Auto-key records each pose. Drag keys in the timeline to retime them, or use Spread keys in the side panel to space them out.'),el('li',{},'Give it the anime feel. Set Animate on to Twos or Threes, use Snap easing on fast moves, and hold poses. Add Impact frame, Speed lines and Colour fringe for big beats. Add the Sketchy lines filter in the panel to make lines wobble as it plays.'),el('li',{},'Direct it. Use cuts for each shot, move the Camera, set layer Depth for parallax, then add music with Add > Sound.'),el('li',{},'Save the project often, then press Export video.')),
+ el('h3',{},'Shortcuts'),el('div',{class:'keys',html:[['Space','Play'],[', .','Step a frame'],['F6 / K','Keyframe'],['F7','Blank drawing'],['F5','Hold longer'],['[ ]','Brush size'],['V','Select'],['B','Brush'],['E','Eraser'],['G','Fill'],['A','Lasso'],['J','Bone'],['P','Pose'],['D','Deform'],['W','Weights'],['M','Pin bone'],['C','Camera'],['Ctrl Z','Undo'],['Ctrl S','Save'],['Ctrl A','Select layer keys'],['Ctrl C / V','Copy keys'],['Delete','Remove keys'],['Ctrl wheel','Zoom timeline']].map(k=>`<span><kbd>${k[0]}</kbd>${k[1]}</span>`).join('')}),
  el('div',{class:'acts'},el('button',{class:'primary',onclick:closeDialog},'Got it'))));}
 function dialog(c){const m=$('#modal');m.replaceChildren(c);m.hidden=false;}
 function closeDialog(){$('#modal').hidden=true;}
@@ -165,6 +174,7 @@ addEventListener('keydown',e=>{
  if(mod&&lk==='y'){e.preventDefault();Hist.go(1);return;}
  if(mod&&lk==='s'){e.preventDefault();saveProject();return;}
  if(mod&&lk==='o'){e.preventDefault();openProject();return;}
+ if(mod&&lk==='a'){e.preventDefault();selectAllKeys();return;}
  if(mod&&lk==='c'){copyKeys();return;}if(mod&&lk==='v'){pasteKeys();return;}
  if(mod)return;
  if(k===' '){e.preventDefault();if(!e.repeat){Ptr.space=true;spaceTap=true;}return;}
