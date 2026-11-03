@@ -2,7 +2,7 @@
 const FONTS=['Shippori Mincho','Noto Serif JP','Dela Gothic One','Reggae One','Yuji Syuku','Zen Maru Gothic','Zen Kaku Gothic New','Noto Sans JP'];
 const FONT_STACK=f=>`"${f}","Noto Sans JP",serif`;
 const S={doc:null,si:0,frame:0,layerId:null,tool:'select',autokey:true,playing:false,playAll:false,loop:true,onion:false,onionN:2,onionGap:2,camView:true,view:{z:.5,x:0,y:0},
- brush:{size:7,opacity:1,color:'#ffffff',smooth:.45,taper:true},celStart:'copy',eraser:{size:30},shapeFill:false,fillGap:2,
+ brush:{size:7,opacity:1,color:'#ffffff',smooth:.45,taper:true},celStart:'copy',stamp:{id:null,size:220,random:false,min:80,max:320,rot:0,scatter:0,spacing:100,opacity:1,mix:false},eraser:{size:30},shapeFill:false,fillGap:2,
  sel:{cam:false,boneId:null,partId:null},keys:new Set(),setup:false,ik:true,ikLen:2,pins:new Set(),brushR:70,weightAmt:.12,lasso:null,tl:{ppf:9,sx:0,sy:0},rowOpen:{},isSample:false};
 let Live=null;
 const cur=()=>S.doc.scenes[S.si];

@@ -135,6 +135,11 @@ input[type=range]{padding:0;accent-color:var(--glow)}
 
 .swr{display:flex;align-items:center;gap:5px}
 .sw{width:22px;height:22px;padding:0;border:1px solid var(--mute);border-radius:50%}
+
+.stamps{display:flex;gap:4px;flex-wrap:wrap}
+.stampT{width:38px;height:38px;padding:2px;background:repeating-conic-gradient(#4a5064 0 25%,#2b3040 0 50%) 0 0/10px 10px}
+.stampT canvas{width:100%;height:100%;display:block}
+.stampT.on{outline:2px solid var(--glow);border-color:var(--glow)}
 </style>
 <div id="app">
  <header id="top">
@@ -751,7 +756,7 @@ function sampleDoc(){
 const FONTS=['Shippori Mincho','Noto Serif JP','Dela Gothic One','Reggae One','Yuji Syuku','Zen Maru Gothic','Zen Kaku Gothic New','Noto Sans JP'];
 const FONT_STACK=f=>`"${f}","Noto Sans JP",serif`;
 const S={doc:null,si:0,frame:0,layerId:null,tool:'select',autokey:true,playing:false,playAll:false,loop:true,onion:false,onionN:2,onionGap:2,camView:true,view:{z:.5,x:0,y:0},
- brush:{size:7,opacity:1,color:'#ffffff',smooth:.45,taper:true},celStart:'copy',eraser:{size:30},shapeFill:false,fillGap:2,
+ brush:{size:7,opacity:1,color:'#ffffff',smooth:.45,taper:true},celStart:'copy',stamp:{id:null,size:220,random:false,min:80,max:320,rot:0,scatter:0,spacing:100,opacity:1,mix:false},eraser:{size:30},shapeFill:false,fillGap:2,
  sel:{cam:false,boneId:null,partId:null},keys:new Set(),setup:false,ik:true,ikLen:2,pins:new Set(),brushR:70,weightAmt:.12,lasso:null,tl:{ppf:9,sx:0,sy:0},rowOpen:{},isSample:false};
 let Live=null;
 const cur=()=>S.doc.scenes[S.si];
@@ -838,7 +843,7 @@ function drawOverlay(){
   poly(boxPts(base,[0,0,d.w,d.h]));ox.setLineDash([5*D,4*D]);ox.strokeStyle='#666c80';ox.stroke();ox.setLineDash([]);
   const cam=camState(cur(),S.frame),im=M.inv(camMatrix(cam,1,d.w,d.h)),q=boxPts(M.mul(base,im),[0,0,d.w,d.h]);poly(q);ox.lineWidth=2*D;ox.strokeStyle=OV.glow;ox.stroke();ox.lineWidth=D;ox.fillStyle=OV.glow;ox.font=`${11*D}px DM Mono,monospace`;ox.fillText('CAMERA',q[0][0]+4*D,q[0][1]-5*D);
  }
- if(!l)return;
+ if(!l){if(S.tool==='stamp'&&Ptr.x!=null&&NextStamp){const b=Bitmaps.get(NextStamp.id);if(b){const k=NextStamp.size/Math.max(b.w,b.h)*base[0];ox.save();ox.translate(Ptr.x,Ptr.y);ox.rotate(NextStamp.rot*Math.PI/180);ox.scale(k,k);ox.globalAlpha=.6;ox.drawImage(b.canvas,-b.w/2,-b.h/2);ox.restore();}}return;}
  if(S.tool==='select'&&!(S.setup&&l.type==='rig')&&!S.sel.cam&&l.type!=='fx'){const h=selHandles(l);if(h){poly(h.q);ox.strokeStyle=OV.blue;ox.stroke();ox.fillStyle='#fff';h.q.forEach(p=>{ox.fillRect(p[0]-4*D,p[1]-4*D,8*D,8*D);ox.strokeRect(p[0]-4*D,p[1]-4*D,8*D,8*D);});ox.beginPath();ox.moveTo(...h.top);ox.lineTo(...h.rot);ox.stroke();ox.beginPath();ox.arc(h.rot[0],h.rot[1],5*D,0,7);ox.fill();ox.stroke();}}
  if(l.type==='rig'){
   const m=curMat(l),rig=l.rig,pose=rigPose(rig,stepF(l,S.frame),S.setup);
@@ -860,6 +865,7 @@ function drawOverlay(){
  }
  if(S.tool==='bone'&&Ptr.drag&&Ptr.drag.head){const m=curMat(l),a=M.ap(m,...Ptr.drag.head),b=M.ap(m,...Ptr.drag.tip);ox.strokeStyle=OV.glow;ox.lineWidth=3*D;ox.beginPath();ox.moveTo(...a);ox.lineTo(...b);ox.stroke();}
  if(S.lasso&&S.lasso.pts.length>1){const m=curMat(l);poly(S.lasso.pts.map(p=>M.ap(m,p[0],p[1])),S.lasso.closed);ox.strokeStyle='#000';ox.lineWidth=D*2;ox.stroke();ox.setLineDash([6*D,5*D]);ox.lineDashOffset=-(performance.now()/40%22);ox.strokeStyle='#fff';ox.lineWidth=D;ox.stroke();ox.setLineDash([]);}
+ if(S.tool==='stamp'&&Ptr.x!=null&&!Ptr.down&&NextStamp){const b=Bitmaps.get(NextStamp.id);if(b){const m=l?curMat(l):baseM(),q=M.ap(M.inv(m),Ptr.x,Ptr.y),k=NextStamp.size/Math.max(b.w,b.h);ox.save();ox.setTransform(...m);ox.translate(q[0],q[1]);ox.rotate(NextStamp.rot*Math.PI/180);ox.scale(k,k);ox.globalAlpha=.6;ox.drawImage(b.canvas,-b.w/2,-b.h/2);ox.restore();}}
  if(Ptr.x!=null){const z=S.view.z*D,sc=l?M.scale(curMat(l)):z;let r=0;
   if(S.tool==='brush')r=S.brush.size/2*sc;else if(S.tool==='eraser')r=S.eraser.size/2*sc;else if(S.tool==='deform'||S.tool==='weight')r=S.brushR*D;
   if(r){ox.beginPath();ox.arc(Ptr.x,Ptr.y,Math.max(r,1),0,7);ox.strokeStyle='rgba(0,0,0,.6)';ox.lineWidth=D*2;ox.stroke();ox.strokeStyle='#fff';ox.lineWidth=D;ox.stroke();}}
@@ -942,6 +948,20 @@ Tools.zoom={down(p,e){const r=box.getBoundingClientRect(),mx=p[0]/dpr(),my=p[1]/
 Tools.camera={down(p,e){S.sel.cam=true;const c=cur().camera;Ptr.drag={p,x:val(c,'x',S.frame),y:val(c,'y',S.frame),z:val(c,'zoom',S.frame)};buildInspector();buildRows();},
  move(p,e){const D=Ptr.drag;if(!D)return;const c=cur().camera,dz=baseM()[0];if(e.shiftKey){writeProp(c,'zoom',clamp(D.z*Math.exp((D.p[1]-p[1])*.003),.1,10));return;}const k=(S.camView?-1:1)/dz/(S.camView?D.z:1);writeProp(c,'x',D.x+(p[0]-D.p[0])*k);writeProp(c,'y',D.y+(p[1]-D.p[1])*k);},
  up(){commit();}};
+/* stamp: press an uploaded image onto the drawing, at one size or a random size in a range */
+const stampList=()=>{S.doc.stamps=S.doc.stamps||[];return S.doc.stamps;};
+let NextStamp=null;
+function rollStamp(){const t=S.stamp,ids=stampList().filter(i=>Bitmaps.has(i));if(!ids.length){NextStamp=null;return;}
+ if(!ids.includes(t.id))t.id=ids[0];const id=t.mix?ids[Math.floor(Math.random()*ids.length)]:t.id;
+ const lo=Math.min(t.min,t.max),hi=Math.max(t.min,t.max);
+ NextStamp={id,size:t.random?lo+Math.random()*(hi-lo):t.size,rot:t.rot?(Math.random()*2-1)*t.rot:0};}
+async function uploadStamps(){const fs=await pick('image/*',true);if(!fs.length)return;for(const f of fs){let c=await fileBitmap(f);const k=Math.min(1,1600/Math.max(c.width,c.height));if(k<1)c=scaled(c,k);const id=addBitmap(c);stampList().push(id);S.stamp.id=id;}rollStamp();commit();buildOpts();toast(fs.length>1?`Added ${fs.length} stamps.`:'Stamp ready. Click the stage to press it.');}
+function placeStamp(L,x,y){const n=NextStamp,b=n&&Bitmaps.get(n.id);if(!b)return;const k=n.size/Math.max(b.w,b.h),t=S.stamp;let px=x,py=y;if(t.scatter){const a=Math.random()*6.283,r=Math.sqrt(Math.random())*t.scatter;px+=Math.cos(a)*r;py+=Math.sin(a)*r;}
+ const g=L.stroke.getContext('2d');g.save();g.setTransform(1,0,0,1,0,0);g.translate(px,py);g.rotate(n.rot*Math.PI/180);g.scale(k,k);g.imageSmoothingQuality='high';g.drawImage(b.canvas,-b.w/2,-b.h/2);g.restore();
+ const R=Math.hypot(b.w,b.h)*k/2+2;grow(L,px-R,py-R,px+R,py+R);const used=n.size;rollStamp();return used;}
+Tools.stamp={down(p){if(!NextStamp)rollStamp();if(!NextStamp)return toast('Upload an image first, using the button above the stage.');const l=ensureDrawLayer();if(!l)return;const L=beginLive(l,true);L.alpha=S.stamp.opacity;const q=toLocal(l,p),a=[q[0]-L.ox,q[1]-L.oy];const used=placeStamp(L,a[0],a[1]);Ptr.drag={l,last:a,gap:used};},
+ move(p){const D=Ptr.drag;if(!D||!Live)return;const q=toLocal(D.l,p),a=[q[0]-Live.ox,q[1]-Live.oy],step=Math.max(4,D.gap*S.stamp.spacing/100);if(S.stamp.spacing<=0)return;while(Math.hypot(a[0]-D.last[0],a[1]-D.last[1])>=step){const d=Math.hypot(a[0]-D.last[0],a[1]-D.last[1]),t=step/d;D.last=[D.last[0]+(a[0]-D.last[0])*t,D.last[1]+(a[1]-D.last[1])*t];const u=placeStamp(Live,D.last[0],D.last[1]);if(u)D.gap=u;}},
+ up(){if(Ptr.drag&&Live)endLive();}};
 /* select / transform */
 function pickLayer(p){const sc=cur();for(let i=sc.layers.length-1;i>=0;i--){const l=sc.layers[i];if(!l.vis||l.lock||l.type==='fx'||l.type==='solid')continue;const b=layerBounds(l);if(!b)continue;const q=toLocal(l,p);if(q[0]<b[0]||q[1]<b[1]||q[0]>b[0]+b[2]||q[1]>b[1]+b[3])continue;
   const src=l.type==='image'?Bitmaps.get(l.asset):l.type==='draw'?Bitmaps.get(celAt(l,stepF(l,S.frame))?.a):null;
@@ -1232,12 +1252,12 @@ function selectAllKeys(){S.keys.clear();const l=layer();if(S.sel.cam){const c=cu
 const I=(d)=>`<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
 const TOOLS=[
  ['select','Select / move (V)','v','<path d="M5 3l14 9-6.5 1.2L9 20z"/>'],['camera','Camera: drag to pan, Shift+drag to zoom (C)','c','<rect x="3" y="7" width="13" height="11" rx="1"/><path d="M16 11l5-3v9l-5-3"/>'],'-',
- ['brush','Brush, pressure-sensitive (B)','b','<path d="M4 20c3 0 5-1 5.5-3.5S13 12 20 4c-7 3-11 7-12.500 9.500S6 17 4 20z"/>'],['eraser','Eraser (E)','e','<path d="M8 19h12M5 15l9-10 6 5-9 9H8z"/>'],['fill','Fill closed shapes (G)','g','<path d="M12 3l8 8-7 8-8-8zM19 16s2 2.500 2 4a2 2 0 01-4 0c0-1.500 2-4 2-4z"/>'],['line','Line (L)','l','<path d="M5 19L19 5"/>'],['rect','Rectangle (U)','u','<rect x="4" y="6" width="16" height="12"/>'],['ellipse','Ellipse (O)','o','<ellipse cx="12" cy="12" rx="9" ry="7"/>'],['pick','Eyedropper (I)','i','<path d="M14 6l4 4M5 19l1-4 8-8 3 3-8 8z"/>'],['lasso','Lasso: move an area or lift it into a rig part (A)','a','<path d="M12 4c5 0 9 2.500 9 6s-4 6-9 6-9-2.500-9-6 4-6 9-6zM7 15c-1 2 0 4 2 5"/>'],['text','Text (T)','t','<path d="M5 6V4h14v2M12 4v16M9 20h6"/>'],'-',
+ ['brush','Brush, pressure-sensitive (B)','b','<path d="M4 20c3 0 5-1 5.5-3.5S13 12 20 4c-7 3-11 7-12.500 9.500S6 17 4 20z"/>'],['eraser','Eraser (E)','e','<path d="M8 19h12M5 15l9-10 6 5-9 9H8z"/>'],['fill','Fill closed shapes (G)','g','<path d="M12 3l8 8-7 8-8-8zM19 16s2 2.500 2 4a2 2 0 01-4 0c0-1.500 2-4 2-4z"/>'],['line','Line (L)','l','<path d="M5 19L19 5"/>'],['rect','Rectangle (U)','u','<rect x="4" y="6" width="16" height="12"/>'],['ellipse','Ellipse (O)','o','<ellipse cx="12" cy="12" rx="9" ry="7"/>'],['pick','Eyedropper (I)','i','<path d="M14 6l4 4M5 19l1-4 8-8 3 3-8 8z"/>'],['lasso','Lasso: move an area or lift it into a rig part (A)','a','<path d="M12 4c5 0 9 2.500 9 6s-4 6-9 6-9-2.500-9-6 4-6 9-6zM7 15c-1 2 0 4 2 5"/>'],['text','Text (T)','t','<path d="M5 6V4h14v2M12 4v16M9 20h6"/>'],['stamp','Stamp an uploaded image (S)','s','<path d="M9 4h6v5c0 2 3 3 3 6H6c0-3 3-4 3-6zM5 19h14"/>'],'-',
  ['bone','Bone: drag to draw a bone, start on a tip to chain (J)','j','<path d="M6 18L18 6M18 6a2 2 0 112-2 2 2 0 11-2 2zM6 18a2 2 0 11-2 2 2 2 0 112-2z"/>'],['pose','Pose bones: drag to rotate, tip for IK, Shift to move (P)','p','<circle cx="12" cy="5" r="2"/><path d="M12 7v7M12 14l-4 6M12 14l4 6M6 10l6-1 6-1"/>'],['deform','Deform mesh with a soft brush (D)','d','<path d="M3 8c4-3 6 3 9 0s5-3 9 0M3 16c4-3 6 3 9 0s5-3 9 0M8 4v16M16 4v16"/>'],['weight','Paint bone weights (W), Alt removes','w','<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 010 16z" fill="currentColor"/>'],'-',
  ['hand','Pan view (H, or hold Space)','h','<path d="M8 12V6a1.500 1.500 0 013 0v5V4.500a1.500 1.500 0 013 0V11V6a1.500 1.500 0 013 0v9c0 3-2 6-6 6-3 0-4-1-6-5l-2-3c-1-2 1-3 2-2z"/>'],['zoom','Zoom, Alt zooms out (Z)','z','<circle cx="10" cy="10" r="6"/><path d="M15 15l6 6M7.500 10h5M10 7.500v5"/>'],
 ];
 function buildTools(){const h=$('#tools');h.innerHTML='';TOOLS.forEach(t=>{if(t==='-')return h.append(el('hr'));h.append(el('button',{id:'tool-'+t[0],title:t[1],'aria-label':t[1],html:I(t[3]),class:S.tool===t[0]?'on':'',onclick:()=>selectTool(t[0])}));});}
-function selectTool(t){S.tool=t;$$('#tools button').forEach(b=>b.classList.toggle('on',b.id==='tool-'+t));if(t==='bone'){const l=rigLayer();if(l&&!S.setup){S.setup=true;buildInspector();}}if(t==='deform'&&S.setup)setRigMode(false);buildOpts();invalidate();}
+function selectTool(t){S.tool=t;if(t==='stamp')rollStamp();$$('#tools button').forEach(b=>b.classList.toggle('on',b.id==='tool-'+t));if(t==='bone'){const l=rigLayer();if(l&&!S.setup){S.setup=true;buildInspector();}}if(t==='deform'&&S.setup)setRigMode(false);buildOpts();invalidate();}
 function setRigMode(setup){const was=S.setup;S.setup=setup;if(was&&!setup){const l=rigLayer();if(l)l.rig.parts.forEach(p=>{if(p.mesh&&p.bound&&!p.painted)autoWeights(l.rig,p,p.bound);});commit();}buildInspector();invalidate();}
 function rng(id,label,min,max,step,get,set){const o=el('output',{},String(get()));return el('label',{for:id},label,el('input',{id,type:'range',min,max,step,value:get(),oninput:e=>{set(+e.target.value);o.textContent=e.target.value;invalidate();}}),o);}
 function buildOpts(){
@@ -1249,6 +1269,17 @@ function buildOpts(){
   if(t==='brush')add(rng('oSm','Smoothing',0,1,.05,()=>S.brush.smooth,v=>S.brush.smooth=v),el('label',{},el('input',{id:'oTaper',type:'checkbox',checked:S.brush.taper,onchange:e=>S.brush.taper=e.target.checked}),'Tapered lines'),celOpt()||'');
   else if(t!=='line')add(el('label',{},el('input',{id:'oFill',type:'checkbox',checked:S.shapeFill,onchange:e=>S.shapeFill=e.target.checked}),'Filled'));
   if(t!=='brush'&&celOpt())add(celOpt());}
+ else if(t==='stamp'){const st=S.stamp,re=fn=>v=>{fn(v);rollStamp();};
+  add(el('button',{id:'stampUp',class:stampList().length?'':'primary',onclick:uploadStamps},'Upload image'));
+  if(!stampList().length)add(tip('Upload one or more images. PNGs with transparency work best.'));
+  else{
+   add(el('span',{class:'stamps'},stampList().filter(i=>Bitmaps.has(i)).map(id=>{const b=Bitmaps.get(id),c=mkCanvas(52,52),g=c.getContext('2d'),k=Math.min(52/b.w,52/b.h);g.drawImage(b.canvas,(52-b.w*k)/2,(52-b.h*k)/2,b.w*k,b.h*k);return el('button',{class:'stampT'+(id===st.id?' on':''),title:'Use this stamp','aria-label':'Use this stamp',onclick:()=>{st.id=id;st.mix=false;rollStamp();buildOpts();}},c);})),
+    el('button',{title:'Remove the selected stamp from this list. Drawings already stamped stay.',onclick:()=>{S.doc.stamps=stampList().filter(i=>i!==st.id);st.id=null;rollStamp();commit();buildOpts();}},'Remove'));
+   if(stampList().length>1)add(el('label',{},el('input',{id:'stMix',type:'checkbox',checked:st.mix,onchange:e=>{st.mix=e.target.checked;rollStamp();}}),'Mix all stamps'));
+   add(el('label',{},el('input',{id:'stRand',type:'checkbox',checked:st.random,onchange:e=>{st.random=e.target.checked;rollStamp();buildOpts();}}),'Random size'));
+   if(st.random)add(rng('stMin','Min',8,1400,1,()=>st.min,re(v=>st.min=v)),rng('stMax','Max',8,1400,1,()=>st.max,re(v=>st.max=v)));else add(rng('stSize','Size',8,1400,1,()=>st.size,re(v=>st.size=v)));
+   add(rng('stRot','Random turn',0,180,5,()=>st.rot,re(v=>st.rot=v)),rng('stSp','Drag spacing',0,300,5,()=>st.spacing,v=>st.spacing=v),rng('stSc','Scatter',0,400,5,()=>st.scatter,v=>st.scatter=v),rng('stOp','Opacity',.05,1,.05,()=>st.opacity,v=>st.opacity=v),celOpt()||'');
+  }}
  else if(t==='eraser')add(rng('oEr','Size',2,200,1,()=>S.eraser.size,v=>S.eraser.size=v));
  else if(t==='fill')add(color(),rng('oGap','Close gaps',0,6,1,()=>S.fillGap,v=>S.fillGap=v),tip('Fills stop at your line art. Raise this if colour leaks through small gaps.'));
  else if(t==='select')add(tip(S.setup?'Drag a part to line it up with the skeleton.':'Drag to move. Corners scale, the top circle rotates. Shift keeps it straight.'));
@@ -1391,7 +1422,7 @@ function buildMenus(){const h=$('#menus');h.replaceChildren(
 function addNew(t,k){const d=S.doc;let l;if(t==='draw'){l=newLayer('draw','Drawing',{cels:[]});l.p.x=l.p.ax=d.w/2;l.p.y=l.p.ay=d.h/2;}if(t==='text'){l=textLayer('Your words here',d.w/2,d.h/2,{});l.screen=false;}if(t==='solid'){l=newLayer('solid','Solid colour',{color:'#223355'});}if(t==='rig'){l=newLayer('rig','Character rig',{rig:{bones:[],parts:[]}});}if(t==='fx')l=fxLayer(k);addLayer(l);if(t==='rig')S.setup=true;if(t==='fx'&&l.fx==='gradient'){const ls=cur().layers;ls.splice(ls.indexOf(l),1);ls.unshift(l);}structure();commit();}
 function openGuide(){dialog(el('div',{class:'dlg'},el('h2',{},'Making a shot in Genga'),
  el('ol',{},el('li',{},'Get your art in. Draw on a drawing layer, or use Add > Layered PSD to bring each Photoshop layer in as a part. With a flat image, use the Lasso to cut it into parts.'),el('li',{},'Rig it. Select the rig layer, choose Set up, and draw bones with the Bone tool (J) from the hips outward. Press Auto-bind for stiff parts. For bending parts, tick their bones and press Bind smooth.'),el('li',{},'Animate. Switch to Animate, move the playhead, and pose with the Pose tool (P). Auto-key records each pose. Drag keys in the timeline to retime them, or use Spread keys in the side panel to space them out.'),el('li',{},'Give it the anime feel. Set Animate on to Twos or Threes, use Snap easing on fast moves, and hold poses. Add Impact frame, Speed lines and Colour fringe for big beats. Add the Sketchy lines filter in the panel to make lines wobble as it plays.'),el('li',{},'Direct it. Use cuts for each shot, move the Camera, set layer Depth for parallax, then add music with Add > Sound.'),el('li',{},'Save the project often, then press Export video.')),
- el('h3',{},'Shortcuts'),el('div',{class:'keys',html:[['Space','Play'],[', .','Step a frame'],['F6 / K','Keyframe'],['F7','Blank drawing'],['F5','Hold longer'],['[ ]','Brush size'],['V','Select'],['B','Brush'],['E','Eraser'],['G','Fill'],['A','Lasso'],['J','Bone'],['P','Pose'],['D','Deform'],['W','Weights'],['M','Pin bone'],['C','Camera'],['Ctrl Z','Undo'],['Ctrl S','Save'],['Ctrl A','Select layer keys'],['Ctrl C / V','Copy keys'],['Delete','Remove keys'],['Ctrl wheel','Zoom timeline']].map(k=>`<span><kbd>${k[0]}</kbd>${k[1]}</span>`).join('')}),
+ el('h3',{},'Shortcuts'),el('div',{class:'keys',html:[['Space','Play'],[', .','Step a frame'],['F6 / K','Keyframe'],['F7','Blank drawing'],['F5','Hold longer'],['[ ]','Brush size'],['V','Select'],['B','Brush'],['E','Eraser'],['G','Fill'],['S','Stamp'],['A','Lasso'],['J','Bone'],['P','Pose'],['D','Deform'],['W','Weights'],['M','Pin bone'],['C','Camera'],['Ctrl Z','Undo'],['Ctrl S','Save'],['Ctrl A','Select layer keys'],['Ctrl C / V','Copy keys'],['Delete','Remove keys'],['Ctrl wheel','Zoom timeline']].map(k=>`<span><kbd>${k[0]}</kbd>${k[1]}</span>`).join('')}),
  el('div',{class:'acts'},el('button',{class:'primary',onclick:closeDialog},'Got it'))));}
 function dialog(c){const m=$('#modal');m.replaceChildren(c);m.hidden=false;}
 function closeDialog(){$('#modal').hidden=true;}
@@ -1520,7 +1551,7 @@ async function boot(){
  $('#btnExport').onclick=openExport;
  const sp=$('#split');sp.addEventListener('pointerdown',e=>{sp.setPointerCapture(e.pointerId);const y=e.clientY,h=$('#tl').getBoundingClientRect().height;const mv=m=>{document.documentElement.style.setProperty('--tlh',clamp(h+y-m.clientY,150,innerHeight-220)+'px');onResize();};const up=()=>{sp.removeEventListener('pointermove',mv);sp.removeEventListener('pointerup',up);onResize(true);};sp.addEventListener('pointermove',mv);sp.addEventListener('pointerup',up);});
  const onResize=(f)=>{resizeStage(f===true);sizeGrid();invalidate();};
- new ResizeObserver(()=>onResize(true)).observe(box);new ResizeObserver(()=>{sizeGrid();invalidate();}).observe($('#gridWrap'));
+ let lastW=0,lastH=0;new ResizeObserver(()=>{const r=box.getBoundingClientRect();const fit=Math.abs(r.width-lastW)>1;if(!fit)S.view.y+=(r.height-lastH)/2;lastW=r.width;lastH=r.height;onResize(fit);}).observe(box);new ResizeObserver(()=>{sizeGrid();invalidate();}).observe($('#gridWrap'));
  document.fonts&&document.fonts.ready.then(()=>{invalidate();scheduleThumbs();});
  await Promise.all(FONTS.map(f=>document.fonts.load(`40px "${f}"`,'あA').catch(()=>{})));
  const opened=await Store.open();

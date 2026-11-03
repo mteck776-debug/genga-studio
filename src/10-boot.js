@@ -9,7 +9,7 @@ async function boot(){
  $('#btnExport').onclick=openExport;
  const sp=$('#split');sp.addEventListener('pointerdown',e=>{sp.setPointerCapture(e.pointerId);const y=e.clientY,h=$('#tl').getBoundingClientRect().height;const mv=m=>{document.documentElement.style.setProperty('--tlh',clamp(h+y-m.clientY,150,innerHeight-220)+'px');onResize();};const up=()=>{sp.removeEventListener('pointermove',mv);sp.removeEventListener('pointerup',up);onResize(true);};sp.addEventListener('pointermove',mv);sp.addEventListener('pointerup',up);});
  const onResize=(f)=>{resizeStage(f===true);sizeGrid();invalidate();};
- new ResizeObserver(()=>onResize(true)).observe(box);new ResizeObserver(()=>{sizeGrid();invalidate();}).observe($('#gridWrap'));
+ let lastW=0,lastH=0;new ResizeObserver(()=>{const r=box.getBoundingClientRect();const fit=Math.abs(r.width-lastW)>1;if(!fit)S.view.y+=(r.height-lastH)/2;lastW=r.width;lastH=r.height;onResize(fit);}).observe(box);new ResizeObserver(()=>{sizeGrid();invalidate();}).observe($('#gridWrap'));
  document.fonts&&document.fonts.ready.then(()=>{invalidate();scheduleThumbs();});
  await Promise.all(FONTS.map(f=>document.fonts.load(`40px "${f}"`,'あA').catch(()=>{})));
  const opened=await Store.open();

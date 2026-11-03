@@ -35,7 +35,7 @@ function drawOverlay(){
   poly(boxPts(base,[0,0,d.w,d.h]));ox.setLineDash([5*D,4*D]);ox.strokeStyle='#666c80';ox.stroke();ox.setLineDash([]);
   const cam=camState(cur(),S.frame),im=M.inv(camMatrix(cam,1,d.w,d.h)),q=boxPts(M.mul(base,im),[0,0,d.w,d.h]);poly(q);ox.lineWidth=2*D;ox.strokeStyle=OV.glow;ox.stroke();ox.lineWidth=D;ox.fillStyle=OV.glow;ox.font=`${11*D}px DM Mono,monospace`;ox.fillText('CAMERA',q[0][0]+4*D,q[0][1]-5*D);
  }
- if(!l)return;
+ if(!l){if(S.tool==='stamp'&&Ptr.x!=null&&NextStamp){const b=Bitmaps.get(NextStamp.id);if(b){const k=NextStamp.size/Math.max(b.w,b.h)*base[0];ox.save();ox.translate(Ptr.x,Ptr.y);ox.rotate(NextStamp.rot*Math.PI/180);ox.scale(k,k);ox.globalAlpha=.6;ox.drawImage(b.canvas,-b.w/2,-b.h/2);ox.restore();}}return;}
  if(S.tool==='select'&&!(S.setup&&l.type==='rig')&&!S.sel.cam&&l.type!=='fx'){const h=selHandles(l);if(h){poly(h.q);ox.strokeStyle=OV.blue;ox.stroke();ox.fillStyle='#fff';h.q.forEach(p=>{ox.fillRect(p[0]-4*D,p[1]-4*D,8*D,8*D);ox.strokeRect(p[0]-4*D,p[1]-4*D,8*D,8*D);});ox.beginPath();ox.moveTo(...h.top);ox.lineTo(...h.rot);ox.stroke();ox.beginPath();ox.arc(h.rot[0],h.rot[1],5*D,0,7);ox.fill();ox.stroke();}}
  if(l.type==='rig'){
   const m=curMat(l),rig=l.rig,pose=rigPose(rig,stepF(l,S.frame),S.setup);
@@ -57,6 +57,7 @@ function drawOverlay(){
  }
  if(S.tool==='bone'&&Ptr.drag&&Ptr.drag.head){const m=curMat(l),a=M.ap(m,...Ptr.drag.head),b=M.ap(m,...Ptr.drag.tip);ox.strokeStyle=OV.glow;ox.lineWidth=3*D;ox.beginPath();ox.moveTo(...a);ox.lineTo(...b);ox.stroke();}
  if(S.lasso&&S.lasso.pts.length>1){const m=curMat(l);poly(S.lasso.pts.map(p=>M.ap(m,p[0],p[1])),S.lasso.closed);ox.strokeStyle='#000';ox.lineWidth=D*2;ox.stroke();ox.setLineDash([6*D,5*D]);ox.lineDashOffset=-(performance.now()/40%22);ox.strokeStyle='#fff';ox.lineWidth=D;ox.stroke();ox.setLineDash([]);}
+ if(S.tool==='stamp'&&Ptr.x!=null&&!Ptr.down&&NextStamp){const b=Bitmaps.get(NextStamp.id);if(b){const m=l?curMat(l):baseM(),q=M.ap(M.inv(m),Ptr.x,Ptr.y),k=NextStamp.size/Math.max(b.w,b.h);ox.save();ox.setTransform(...m);ox.translate(q[0],q[1]);ox.rotate(NextStamp.rot*Math.PI/180);ox.scale(k,k);ox.globalAlpha=.6;ox.drawImage(b.canvas,-b.w/2,-b.h/2);ox.restore();}}
  if(Ptr.x!=null){const z=S.view.z*D,sc=l?M.scale(curMat(l)):z;let r=0;
   if(S.tool==='brush')r=S.brush.size/2*sc;else if(S.tool==='eraser')r=S.eraser.size/2*sc;else if(S.tool==='deform'||S.tool==='weight')r=S.brushR*D;
   if(r){ox.beginPath();ox.arc(Ptr.x,Ptr.y,Math.max(r,1),0,7);ox.strokeStyle='rgba(0,0,0,.6)';ox.lineWidth=D*2;ox.stroke();ox.strokeStyle='#fff';ox.lineWidth=D;ox.stroke();}}
@@ -139,6 +140,20 @@ Tools.zoom={down(p,e){const r=box.getBoundingClientRect(),mx=p[0]/dpr(),my=p[1]/
 Tools.camera={down(p,e){S.sel.cam=true;const c=cur().camera;Ptr.drag={p,x:val(c,'x',S.frame),y:val(c,'y',S.frame),z:val(c,'zoom',S.frame)};buildInspector();buildRows();},
  move(p,e){const D=Ptr.drag;if(!D)return;const c=cur().camera,dz=baseM()[0];if(e.shiftKey){writeProp(c,'zoom',clamp(D.z*Math.exp((D.p[1]-p[1])*.003),.1,10));return;}const k=(S.camView?-1:1)/dz/(S.camView?D.z:1);writeProp(c,'x',D.x+(p[0]-D.p[0])*k);writeProp(c,'y',D.y+(p[1]-D.p[1])*k);},
  up(){commit();}};
+/* stamp: press an uploaded image onto the drawing, at one size or a random size in a range */
+const stampList=()=>{S.doc.stamps=S.doc.stamps||[];return S.doc.stamps;};
+let NextStamp=null;
+function rollStamp(){const t=S.stamp,ids=stampList().filter(i=>Bitmaps.has(i));if(!ids.length){NextStamp=null;return;}
+ if(!ids.includes(t.id))t.id=ids[0];const id=t.mix?ids[Math.floor(Math.random()*ids.length)]:t.id;
+ const lo=Math.min(t.min,t.max),hi=Math.max(t.min,t.max);
+ NextStamp={id,size:t.random?lo+Math.random()*(hi-lo):t.size,rot:t.rot?(Math.random()*2-1)*t.rot:0};}
+async function uploadStamps(){const fs=await pick('image/*',true);if(!fs.length)return;for(const f of fs){let c=await fileBitmap(f);const k=Math.min(1,1600/Math.max(c.width,c.height));if(k<1)c=scaled(c,k);const id=addBitmap(c);stampList().push(id);S.stamp.id=id;}rollStamp();commit();buildOpts();toast(fs.length>1?`Added ${fs.length} stamps.`:'Stamp ready. Click the stage to press it.');}
+function placeStamp(L,x,y){const n=NextStamp,b=n&&Bitmaps.get(n.id);if(!b)return;const k=n.size/Math.max(b.w,b.h),t=S.stamp;let px=x,py=y;if(t.scatter){const a=Math.random()*6.283,r=Math.sqrt(Math.random())*t.scatter;px+=Math.cos(a)*r;py+=Math.sin(a)*r;}
+ const g=L.stroke.getContext('2d');g.save();g.setTransform(1,0,0,1,0,0);g.translate(px,py);g.rotate(n.rot*Math.PI/180);g.scale(k,k);g.imageSmoothingQuality='high';g.drawImage(b.canvas,-b.w/2,-b.h/2);g.restore();
+ const R=Math.hypot(b.w,b.h)*k/2+2;grow(L,px-R,py-R,px+R,py+R);const used=n.size;rollStamp();return used;}
+Tools.stamp={down(p){if(!NextStamp)rollStamp();if(!NextStamp)return toast('Upload an image first, using the button above the stage.');const l=ensureDrawLayer();if(!l)return;const L=beginLive(l,true);L.alpha=S.stamp.opacity;const q=toLocal(l,p),a=[q[0]-L.ox,q[1]-L.oy];const used=placeStamp(L,a[0],a[1]);Ptr.drag={l,last:a,gap:used};},
+ move(p){const D=Ptr.drag;if(!D||!Live)return;const q=toLocal(D.l,p),a=[q[0]-Live.ox,q[1]-Live.oy],step=Math.max(4,D.gap*S.stamp.spacing/100);if(S.stamp.spacing<=0)return;while(Math.hypot(a[0]-D.last[0],a[1]-D.last[1])>=step){const d=Math.hypot(a[0]-D.last[0],a[1]-D.last[1]),t=step/d;D.last=[D.last[0]+(a[0]-D.last[0])*t,D.last[1]+(a[1]-D.last[1])*t];const u=placeStamp(Live,D.last[0],D.last[1]);if(u)D.gap=u;}},
+ up(){if(Ptr.drag&&Live)endLive();}};
 /* select / transform */
 function pickLayer(p){const sc=cur();for(let i=sc.layers.length-1;i>=0;i--){const l=sc.layers[i];if(!l.vis||l.lock||l.type==='fx'||l.type==='solid')continue;const b=layerBounds(l);if(!b)continue;const q=toLocal(l,p);if(q[0]<b[0]||q[1]<b[1]||q[0]>b[0]+b[2]||q[1]>b[1]+b[3])continue;
   const src=l.type==='image'?Bitmaps.get(l.asset):l.type==='draw'?Bitmaps.get(celAt(l,stepF(l,S.frame))?.a):null;
